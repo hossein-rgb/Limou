@@ -1,0 +1,590 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Limou</title>
+  <link rel="stylesheet" href="all-styles.css">
+</head>
+<body>
+<div id="shell">
+
+  <!-- ══ TOPBAR ══ -->
+  <div id="top">
+    <div class="logo">
+      <div class="logo-mark">L</div>
+      <span class="logo-name">Limou</span>
+    </div>
+
+    <!-- Mode tabs -->
+    <div class="mode-tabs">
+      <button class="mode-tab on" id="mtab-fe"  onclick="switchMode('fe')">∑ Formulas</button>
+      <button class="mode-tab"    id="mtab-doc" onclick="switchMode('doc')">¶ Document</button>
+    </div>
+
+    <!-- FE toolbar (visible en mode Formules) -->
+    <div class="top-tools" id="fe-tools">
+      <button class="tbtn on"  id="tbL"   onclick="togglePanel('left')"  data-i18n-title="tb-left-panel">☰</button>
+      <button class="tbtn on"  id="tbR"   onclick="togglePanel('right')" data-i18n-title="tb-inspector">⚙</button>
+      <div class="tsep"></div>
+      <button class="tbtn on"  id="tbGrid" onclick="toggleGrid()"        data-i18n-title="tb-grid">⊞</button>
+      <button class="tbtn"     id="tbBB"   onclick="toggleBB()"          data-i18n-title="tb-bb">▣</button>
+      <div class="tsep"></div>
+      <button class="tbtn" onclick="feUndo()" title="Undo (Ctrl+Z)">↩</button>
+      <button class="tbtn" onclick="feRedo()" title="Redo (Ctrl+Y)">↪</button>
+      <div class="tsep"></div>
+      <button class="tbtn tb-text-btn" id="tbText" onclick="setFETool(feTool==='text'?'select':'text')" data-i18n-title="tb-text-tool">T</button>
+      <div class="tsep"></div>
+      <button class="tbtn" onclick="feDelete()" data-i18n-title="tb-delete">✕</button>
+      <div class="tsep"></div>
+      <button class="tbtn accent" id="tbInsDoc" onclick="insertToDoc()" data-i18n-title="tb-insert-doc">⇄ Doc</button>
+    </div>
+
+    <!-- DOC toolbar (visible en mode Document) -->
+    <div class="top-tools" id="doc-tools" style="display:none">
+      <button class="tbtn on"  id="tbDL"  onclick="togglePanel('left')"  data-i18n-title="tb-structure">☰</button>
+      <button class="tbtn on"  id="tbDR"  onclick="togglePanel('right')" data-i18n-title="tb-properties">⚙</button>
+      <div class="tsep"></div>
+      <button class="tbtn on"  id="tbMg"  onclick="toggleMg()"           data-i18n-title="tb-margins">⊡</button>
+      <button class="tbtn"     id="tbBl"  onclick="toggleBl()"           data-i18n-title="tb-bleed">⊞</button>
+      <div class="tsep"></div>
+      <button class="tbtn" onclick="docUndo()" title="Undo">↩</button>
+      <button class="tbtn" onclick="docRedo()" title="Redo">↪</button>
+      <div class="tsep"></div>
+      <button class="tbtn tb-text-btn" id="tbDocText" onclick="setDocTool(docTool==='text'?'select':'text')" data-i18n-title="tb-text-tool">T</button>
+    </div>
+
+    <div class="top-title">
+      <input class="title-inp" id="doc-title" value="Untitled" data-i18n-placeholder="title-placeholder">
+    </div>
+
+    <div class="top-right">
+      <button class="abtn abtn-prev"  onclick="openPM()">Aperçu</button>
+      <button class="abtn abtn-print" onclick="openPM()">Imprimer</button>
+      <div class="tsep"></div>
+      <button class="abtn" id="btn-lang" onclick="toggleLang()" title="Switch language">FR</button>
+    </div>
+  </div>
+
+  <!-- ══ WORKSPACE ══ -->
+  <div id="work">
+
+    <!-- ── LEFT PANEL ── -->
+    <div class="panel left-p" id="panel-left">
+      <div class="panel-hd">
+        <span class="panel-title" id="lpanel-title">Edit</span>
+        <button class="panel-x" onclick="togglePanel('left')">✕</button>
+      </div>
+
+      <!-- FE left tabs -->
+      <div class="ptabs" id="fe-ltabs">
+        <div class="ptab on" id="plt-kb"        onclick="feLTab('kb')">Keyboard</div>
+        <div class="ptab"    id="plt-font"       onclick="feLTab('font')">Fonts</div>
+        <div class="ptab"    id="plt-profiles"   onclick="feLTab('profiles')">Profiles</div>
+        <div class="ptab"    id="plt-layers"     onclick="feLTab('layers')">Layers</div>
+        <div class="ptab"    id="plt-equations"  onclick="feLTab('equations')">Eq.</div>
+      </div>
+
+      <!-- Keyboard (default open) -->
+      <div class="panel-body hidden-pb" id="fe-pb-kb">
+        <input class="kb-search" id="kb-search" placeholder="Search…" oninput="filterKb(this.value)">
+        <div id="kb-root"></div>
+      </div>
+      <!-- Font import -->
+      <div class="panel-body hidden-pb" id="fe-pb-font">
+        <div class="font-dz" id="font-dz"
+          onclick="document.getElementById('font-file-inp').click()"
+          ondragover="event.preventDefault();this.classList.add('dov')"
+          ondragleave="this.classList.remove('dov')"
+          ondrop="fontDrop(event)">
+          <div class="font-dz-icon">↓</div>
+          <p id="font-dz-p">Drag .otf/.ttf/.woff2<br>or click to choose</p>
+        </div>
+        <input type="file" id="font-file-inp" accept=".otf,.ttf,.woff2,.woff" style="display:none" onchange="loadFontFile(this)">
+        <div id="font-list"></div>
+      </div>
+      <!-- Profiles -->
+      <div class="panel-body hidden-pb" id="fe-pb-profiles">
+        <div id="profiles-list"></div>
+        <button class="add-layer-btn" onclick="saveProfile()">💾 Save current profile</button>
+        <button class="add-layer-btn" style="margin-top:4px" onclick="exportProfiles()">↓ Export JSON</button>
+      </div>
+
+      <!-- Layers -->
+      <div class="panel-body hidden-pb" id="fe-pb-layers">
+        <div id="layers-list"></div>
+        <button class="add-layer-btn" onclick="addLayer()">+ New layer</button>
+      </div>
+      <!-- Equations -->
+      <div class="panel-body hidden-pb" id="fe-pb-equations">
+        <div id="equations-list"></div>
+        <button class="add-layer-btn" id="eq-save-btn" onclick="saveEquation()">💾 Save selection</button>
+      </div>
+
+      <!-- DOC left tabs (hidden until doc mode) -->
+      <div class="ptabs hidden-pb" id="doc-ltabs">
+        <div class="ptab on" id="dlt-blocks"  onclick="docLTab('blocks')">Blocks</div>
+        <div class="ptab"    id="dlt-font"    onclick="docLTab('font')">Fonts</div>
+        <div class="ptab"    id="dlt-eq"      onclick="docLTab('eq')">Eq.</div>
+        <div class="ptab"    id="dlt-display" onclick="docLTab('display')">Display</div>
+      </div>
+      <!-- DOC tab: block list -->
+      <div class="panel-body hidden-pb" id="doc-pb-blocks">
+        <div id="bl-list"></div>
+      </div>
+      <div class="panel-foot hidden-pb" id="doc-foot-blocks">
+        <div class="add-btns">
+          <div class="add-btn" onclick="addBlock('title')">H1</div>
+          <div class="add-btn" onclick="addBlock('h2')">H2</div>
+          <div class="add-btn" onclick="addBlock('text')">¶</div>
+          <div class="add-btn" onclick="addBlock('formula')">∑</div>
+          <div class="add-btn" onclick="addBlock('canvas-textbox')" title="Text box">T</div>
+        </div>
+      </div>
+      <!-- DOC tab: font — isolated container, never shares IDs with FE font panel -->
+      <div class="panel-body hidden-pb" id="doc-pb-font">
+        <div class="font-dz" id="doc-font-dz"
+          onclick="document.getElementById('font-file-inp').click()"
+          ondragover="event.preventDefault();this.classList.add('dov')"
+          ondragleave="this.classList.remove('dov')"
+          ondrop="fontDrop(event)">
+          <div class="font-dz-icon">↓</div>
+          <p id="doc-font-dz-p">Drag .otf/.ttf/.woff2<br>or click to choose</p>
+        </div>
+        <div id="doc-font-list"></div>
+      </div>
+      <!-- DOC tab: equations — isolated container -->
+      <div class="panel-body hidden-pb" id="doc-pb-eq">
+        <div id="doc-eq-list"></div>
+      </div>
+      <!-- DOC tab: display modes — isolated container -->
+      <div class="panel-body hidden-pb" id="doc-pb-display">
+        <div id="doc-display-list"></div>
+      </div>
+    </div>
+
+    <!-- ── CANVAS (Formula Editor) ── -->
+    <div id="fe-wrap">
+      <!-- Rulers -->
+      <div class="rulers-row">
+        <div class="ruler-corner"></div>
+        <canvas id="h-ruler" class="ruler h-ruler" onmousedown="startGuide('h',event)"></canvas>
+      </div>
+      <div class="fe-inner">
+        <canvas id="v-ruler" class="ruler v-ruler" onmousedown="startGuide('v',event)"></canvas>
+        <div id="fe-canvas" tabindex="0"
+          ondragover="event.preventDefault()"
+          ondrop="onFEDrop(event)"
+          onclick="onFEClick(event)"
+          onmousedown="onFECanvasMouseDown(event)"
+          onkeydown="onFEKey(event)"
+          onmousemove="onFEMouseMove(event)"
+          onmouseleave="onFEMouseLeave()">
+          <svg id="grid-svg"></svg>
+          <svg id="axis-svg"></svg>
+          <div id="fe-hint">
+            <p>Drag a symbol from the keyboard</p>
+            <p class="hint-sub">Drag from ruler = custom axis · G = grid</p>
+          </div>
+          <div id="slot-nav"></div>
+          <div id="coord-display"></div>
+        </div>
+      </div>
+      <!-- Grid controls bar -->
+      <div id="gc-bar" style="display:none">
+        <span data-i18n="gc-grid-step">Grid step:</span>
+        <input type="range" id="gc-sz" min="8" max="64" step="4" value="24" oninput="setGridSz(+this.value)">
+        <span id="gc-lbl">24px</span>
+        <span class="tsep"></span>
+        <span data-i18n="gc-snap">Snap:</span>
+        <select id="snap-sel" onchange="updateSnapLabel()">
+          <option value="s">Strong (1 step)</option>
+          <option value="m" selected>Soft (½ step)</option>
+          <option value="n">Free (1px)</option>
+        </select>
+        <span id="snap-desc"></span>
+      </div>
+    </div>
+
+    <!-- ── CANVAS (Document) ── -->
+    <div id="doc-wrap" style="display:none">
+      <div id="cvs">
+        <div id="zoom-wrap"></div>
+      </div>
+    </div>
+
+    <!-- ── RIGHT PANEL ── -->
+    <div class="panel right-p" id="panel-right">
+      <div class="panel-hd">
+        <span class="panel-title" id="rpanel-title">Inspector</span>
+        <button class="panel-x" onclick="togglePanel('right')">✕</button>
+      </div>
+
+      <!-- FE inspector -->
+      <div id="fe-inspector">
+        <div id="fe-ins-empty" class="empty-msg" style="padding:10px">Select an element.</div>
+
+        <!-- ── Multi-selection panel ── -->
+        <div id="fe-ins-multi" style="display:none">
+          <div class="multi-ins-title">
+            <span data-i18n="multi-sel-title">Multiple selection</span>
+            <span class="multi-ins-badge" id="multi-sel-count">0</span>
+            <span style="font-weight:400;color:var(--text3)" data-i18n="multi-sel-count-lbl">elements selected</span>
+          </div>
+          <!-- Size -->
+          <div class="multi-ins-row">
+            <label data-i18n="multi-sz-lbl">Size</label>
+            <input type="range" id="multi-sz" min="14" max="120" step="2" oninput="uMultiSz(+this.value)">
+            <input type="number" id="multi-sz-num" min="14" max="120" step="2" oninput="uMultiSz(+this.value)" style="width:44px">
+          </div>
+          <!-- Opacity -->
+          <div class="multi-ins-row">
+            <label data-i18n="multi-op-lbl-t">Opacity</label>
+            <input type="range" id="multi-op" min="0" max="100" step="1" oninput="uMultiOp(+this.value)">
+            <span id="multi-op-lbl" class="mono-val">100%</span>
+          </div>
+          <!-- Layer -->
+          <div class="multi-ins-row">
+            <label data-i18n="multi-layer-lbl">Layer</label>
+            <select id="multi-layer-sel" onchange="uMultiLayer(this.value)"></select>
+          </div>
+          <!-- Actions -->
+          <div class="multi-ins-actions">
+            <button class="ins-btn red" onclick="feSnap();[...feSelIds].forEach(id=>feDelById(id));" data-i18n="multi-del-btn">Delete all</button>
+            <button class="ins-btn green" onclick="feDup();" data-i18n="multi-dup-btn">Duplicate all</button>
+          </div>
+        </div><!-- /fe-ins-multi -->
+
+        <div id="fe-ins-body" style="display:none">
+
+          <div class="ptabs" style="margin-bottom:0">
+            <div class="ptab on" id="fit-elem"  onclick="feInsTab('elem')">Element</div>
+            <div class="ptab"    id="fit-math"  onclick="feInsTab('math')">MATH Table</div>
+          </div>
+
+          <!-- Élément (merged with Couche collision) -->
+          <div class="panel-body" id="fe-it-elem">
+            <div class="psec">
+              <div class="ph" data-i18n-ph="ph-symbol">Symbol</div>
+              <div class="pr"><label data-i18n="lbl-name">Name</label><span id="ins-name" style="font-size:11px;font-weight:600;color:#111"></span></div>
+            </div>
+            <div class="psec">
+              <div class="ph" data-i18n-ph="ph-position">Position</div>
+              <div class="pr">
+                <label>X</label>
+                <input class="pi" type="number" id="ins-px" min="0" max="2000" step="1" value="0" oninput="uElPosX(+this.value)" style="width:60px">
+                <span class="pu">px</span>
+                <label style="margin-left:8px">Y</label>
+                <input class="pi" type="number" id="ins-py" min="0" max="2000" step="1" value="0" oninput="uElPosY(+this.value)" style="width:60px">
+                <span class="pu">px</span>
+              </div>
+            </div>
+            <div class="psec">
+              <div class="ph" data-i18n-ph="ph-size">Size (Alt+↑↓)</div>
+              <div class="pr">
+                <label data-i18n="lbl-size">Size</label>
+                <input class="pi" type="number" id="ins-sz-num" min="14" max="120" step="2" value="48" oninput="uElSz(+this.value)" style="width:60px">
+                <span class="pu">px</span>
+                <input class="pi" type="range" id="ins-sz" min="14" max="120" step="2" value="48" oninput="uElSz(+this.value)" style="flex:1;margin-left:8px">
+              </div>
+              <div class="pr"><label data-i18n="lbl-opacity">Opacity</label>
+                <input class="pi" type="range" id="ins-op" min="10" max="100" step="5" value="100" oninput="uElOp(+this.value)" style="flex:1">
+                <span class="mono-val" id="ins-op-lbl">100%</span>
+              </div>
+            </div>
+            <!-- Free symbol controls -->
+            <div class="psec" id="ins-free-sec" style="display:none">
+              <div class="ph" data-i18n-ph="ph-freesym">Free Symbol</div>
+              <div class="pr" id="ins-sx-row" style="display:none"><label data-i18n="lbl-stretchx">Stretch X</label>
+                <input class="pi" type="range" id="ins-sx" min="40" max="220" step="5" value="100" oninput="uElNode('stretch',+this.value)" style="flex:1">
+                <span class="mono-val" id="ins-sx-lbl">100%</span>
+              </div>
+              <div class="pr" id="ins-sy-row" style="display:none"><label data-i18n="lbl-stretchy">Stretch Y</label>
+                <input class="pi" type="number" id="ins-sy-num" min="100" max="600" step="2" value="100" oninput="uElStretchY(+this.value)" style="width:60px">
+                <span class="pu">%</span>
+                <input class="pi" type="range" id="ins-sy" min="100" max="600" step="2" value="100" oninput="uElStretchY(+this.value)" style="flex:1;margin-left:8px">
+              </div>
+              <div class="pr"><label data-i18n="lbl-axis">Axis offset</label>
+                <input class="pi" type="range" id="ins-ax" min="-20" max="20" step="1" value="0" oninput="uElNode('axis',+this.value)" style="flex:1">
+                <span class="mono-val" id="ins-ax-lbl">0px</span>
+              </div>
+              <div class="pr"><label data-i18n="lbl-italic">Italic corr.</label>
+                <input class="pi" type="range" id="ins-ic" min="0" max="20" step="1" value="0" oninput="uElNode('ic',+this.value)" style="flex:1">
+                <span class="mono-val" id="ins-ic-lbl">0px</span>
+              </div>
+            </div>
+            <!-- Textbox controls (visible only when a textbox is selected) -->
+            <div class="psec" id="ins-tb-sec" style="display:none">
+              <div class="ph" data-i18n-ph="ph-textbox">Text Box</div>
+              <div class="pr">
+                <label data-i18n="lbl-tb-w">Width</label>
+                <input class="pi" type="number" id="ins-tb-w" min="40" max="2000" step="1" value="200" oninput="uTbDim('w',+this.value)" style="width:60px">
+                <span class="pu">px</span>
+                <label style="margin-left:8px" data-i18n="lbl-tb-h">Height</label>
+                <input class="pi" type="number" id="ins-tb-h" min="20" max="2000" step="1" value="60" oninput="uTbDim('h',+this.value)" style="width:60px">
+                <span class="pu">px</span>
+              </div>
+            </div>
+            <!-- Collision -->
+            <div class="psec">
+              <div class="ph" data-i18n-ph="ph-collision">Collision</div>
+              <div class="pr"><label data-i18n="lbl-bbmargin">BB margin</label>
+                <input class="pi" type="range" id="ins-mg" min="0" max="24" step="1" value="5" oninput="uElMg(+this.value)" style="flex:1">
+                <span class="mono-val" id="ins-mg-lbl">5px</span>
+              </div>
+            </div>
+            <div class="psec">
+              <div class="ph" data-i18n-ph="ph-actions">Actions</div>
+              <div style="display:flex;gap:4px">
+                <button class="ins-btn red" onclick="feDelete()" data-i18n="lbl-delete">Delete</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- MATH Table params -->
+          <div class="panel-body hidden-pb" id="fe-it-math">
+            <div class="psec" id="math-frac-sec" style="display:none">
+              <div class="ph" data-i18n-ph="ph-fraction">Fraction</div>
+              <div class="pr"><label data-i18n="lbl-rulethickness">RuleThickness</label>
+                <input class="pi" type="range" id="mp-frt" min="0.01" max="0.15" step="0.005" value="0.06" oninput="uElNode('frt',+this.value)" style="flex:1">
+                <span class="mono-val" id="mp-frt-l">0.060em</span>
+              </div>
+              <div class="pr"><label data-i18n="lbl-numshiftup">NumeratorShiftUp</label>
+                <input class="pi" type="range" id="mp-fnu" min="0.05" max="0.8" step="0.01" value="0.35" oninput="uElNode('fnumerUp',+this.value)" style="flex:1">
+                <span class="mono-val" id="mp-fnu-l">0.35em</span>
+              </div>
+              <div class="pr"><label data-i18n="lbl-denomshiftdown">DenomShiftDown</label>
+                <input class="pi" type="range" id="mp-fdd" min="0.05" max="0.8" step="0.01" value="0.35" oninput="uElNode('fdenomDown',+this.value)" style="flex:1">
+                <span class="mono-val" id="mp-fdd-l">0.35em</span>
+              </div>
+              <div class="pr"><label data-i18n="lbl-numgapmin">NumGapMin</label>
+                <input class="pi" type="range" id="mp-fng" min="0" max="0.3" step="0.005" value="0.09" oninput="uElNode('fnumGap',+this.value)" style="flex:1">
+                <span class="mono-val" id="mp-fng-l">0.09em</span>
+              </div>
+              <div class="pr"><label data-i18n="lbl-denomgapmin">DenomGapMin</label>
+                <input class="pi" type="range" id="mp-fdg" min="0" max="0.3" step="0.005" value="0.09" oninput="uElNode('fdenGap',+this.value)" style="flex:1">
+                <span class="mono-val" id="mp-fdg-l">0.09em</span>
+              </div>
+            </div>
+            <div class="psec" id="math-rad-sec" style="display:none">
+              <div class="ph" data-i18n-ph="ph-radical">Radical</div>
+              <div class="pr"><label data-i18n="lbl-rulethickness">RuleThickness</label>
+                <input class="pi" type="range" id="mp-rrt" min="0.01" max="0.12" step="0.005" value="0.05" oninput="uElNode('rrt',+this.value)" style="flex:1">
+                <span class="mono-val" id="mp-rrt-l">0.050em</span>
+              </div>
+              <div class="pr"><label data-i18n="lbl-verticalgap">VerticalGap</label>
+                <input class="pi" type="range" id="mp-rvg" min="0.02" max="0.5" step="0.01" value="0.12" oninput="uElNode('rvg',+this.value)" style="flex:1">
+                <span class="mono-val" id="mp-rvg-l">0.12em</span>
+              </div>
+              <div class="pr"><label data-i18n="lbl-extraascender">ExtraAscender</label>
+                <input class="pi" type="range" id="mp-rxa" min="0" max="0.3" step="0.01" value="0.05" oninput="uElNode('rxa',+this.value)" style="flex:1">
+                <span class="mono-val" id="mp-rxa-l">0.05em</span>
+              </div>
+            </div>
+            <div class="psec" id="math-delim-sec" style="display:none">
+              <div class="ph" data-i18n-ph="ph-delimiter">Delimiter — GlyphAssembly</div>
+              <div class="pr"><label data-i18n="lbl-minconnector">MinConnectorOverlap</label>
+                <input class="pi" type="range" id="mp-mco" min="0" max="16" step="1" value="2" oninput="uElNode('minOv',+this.value)" style="flex:1">
+                <span class="mono-val" id="mp-mco-l">2px</span>
+              </div>
+            </div>
+            <div class="psec" id="math-op-sec" style="display:none">
+              <div class="ph" data-i18n-ph="ph-displayop">Display operator</div>
+              <div class="pr"><label data-i18n="lbl-displayopminheight">DisplayOpMinHeight</label>
+                <input class="pi" type="range" id="mp-dom" min="20" max="120" step="2" value="55" oninput="uElNode('dispOpH',+this.value)" style="flex:1">
+                <span class="mono-val" id="mp-dom-l">55px</span>
+              </div>
+              <div class="pr"><label data-i18n="lbl-upperlimitgap">UpperLimitGapMin</label>
+                <input class="pi" type="range" id="mp-ulg" min="0" max="0.3" step="0.01" value="0.05" oninput="uElNode('upperGap',+this.value)" style="flex:1">
+                <span class="mono-val" id="mp-ulg-l">0.05em</span>
+              </div>
+              <div class="pr"><label data-i18n="lbl-lowerlimitgap">LowerLimitGapMin</label>
+                <input class="pi" type="range" id="mp-llg" min="0" max="0.3" step="0.01" value="0.05" oninput="uElNode('lowerGap',+this.value)" style="flex:1">
+                <span class="mono-val" id="mp-llg-l">0.05em</span>
+              </div>
+            </div>
+            <div class="psec">
+              <div class="ph" data-i18n-ph="ph-activeparams">Active parameters</div>
+              <div id="active-params"></div>
+            </div>
+          </div>
+
+        </div><!-- /fe-ins-body -->
+      </div><!-- /fe-inspector -->
+
+      <!-- DOC inspector -->
+      <div id="doc-inspector" style="display:none">
+        <div class="ptabs">
+          <div class="ptab on" id="pt-page" onclick="propTab('page')">Page</div>
+          <div class="ptab"    id="pt-bloc" onclick="propTab('bloc')">Block</div>
+          <div class="ptab"    id="pt-imp"  onclick="propTab('imp')">Print</div>
+        </div>
+        <!-- PAGE TAB -->
+        <div class="panel-body" id="pb-page">
+          <div class="psec">
+            <div class="ph" data-i18n-ph="ph-format">Format</div>
+            <div class="pr"><label data-i18n="lbl-preset">Preset</label>
+              <select class="ps" id="preset" onchange="applyPreset(this.value)">
+                <option value="A4">A4 — 210×297mm</option>
+                <option value="A3">A3 — 297×420mm</option>
+                <option value="A5">A5 — 148×210mm</option>
+                <option value="Letter">Letter — 216×279mm</option>
+                <option id="opt-custom" value="custom">Custom…</option>
+              </select>
+            </div>
+            <div class="pr hidden-pb" id="custom-row">
+              <label>W×H</label>
+              <input class="pi" id="pw" type="number" value="210" min="50" max="1200" style="width:50px" oninput="docUpdate()"> ×
+              <input class="pi" id="ph2" type="number" value="297" min="50" max="1200" style="width:50px" oninput="docUpdate()">
+              <span class="pu">mm</span>
+            </div>
+            <div class="pr"><label data-i18n="lbl-orient">Orient.</label>
+              <select class="ps" id="orient" onchange="docUpdate()">
+                <option value="p" data-i18n="opt-portrait">Portrait</option>
+                <option value="l" data-i18n="opt-landscape">Landscape</option>
+              </select>
+            </div>
+          </div>
+          <div class="psec">
+            <div class="ph" data-i18n-ph="ph-margins">Margins <label class="inline-check"><input type="checkbox" id="linked" checked> <span data-i18n="lbl-linked">Linked</span></label></div>
+            <div class="mgrid">
+              <div></div>
+              <div><input class="mi" id="mt" type="number" value="20" min="0" step=".5" oninput="onMg(this.value)"><div class="mlbl" data-i18n="lbl-top">Top</div></div>
+              <div></div>
+              <div><input class="mi" id="ml" type="number" value="20" min="0" step=".5" oninput="onMg(this.value)"><div class="mlbl" data-i18n="lbl-left">Left</div></div>
+              <div class="mcenter" data-i18n="lbl-page">Page</div>
+              <div><input class="mi" id="mr" type="number" value="20" min="0" step=".5" oninput="onMg(this.value)"><div class="mlbl" data-i18n="lbl-right">Right</div></div>
+              <div></div>
+              <div><input class="mi" id="mb" type="number" value="20" min="0" step=".5" oninput="onMg(this.value)"><div class="mlbl" data-i18n="lbl-bottom">Bottom</div></div>
+              <div></div>
+            </div>
+          </div>
+          <div class="psec">
+            <div class="ph" data-i18n-ph="ph-typo">Typography</div>
+            <div class="pr"><label data-i18n="lbl-bodysize">Body size</label><input class="pi" id="bsz" type="number" value="11" min="6" max="24" oninput="docUpdate()"><span class="pu">pt</span></div>
+            <div class="pr"><label data-i18n="lbl-lineh">Line height</label><input class="pi" id="lh" type="number" value="1.7" min="1" max="3" step=".05" oninput="docUpdate()"></div>
+            <div class="pr"><label data-i18n="lbl-indent">Indent</label><input class="pi" id="indent-mm" type="number" value="0" min="0" max="30" step=".5" oninput="docUpdate()"><span class="pu">mm</span></div>
+            <div class="pr"><label data-i18n="lbl-mode">Mode</label>
+              <select class="ps" id="indent-mode" onchange="docUpdate()">
+                <option value="none"    id="opt-indent-none">None</option>
+                <option value="first"   id="opt-indent-first">1st line</option>
+                <option value="hanging" id="opt-indent-hanging">Hanging</option>
+                <option value="all"     id="opt-indent-all">All</option>
+              </select>
+            </div>
+            <div class="pr"><label data-i18n="lbl-font">Font</label>
+              <select class="ps" id="dfont" onchange="docUpdate()">
+                <option value="Georgia,serif">Georgia</option>
+                <option value="'Times New Roman',serif">Times New Roman</option>
+                <option value="Arial,sans-serif">Arial</option>
+                <option value="'Helvetica Neue',sans-serif">Helvetica Neue</option>
+              </select>
+            </div>
+          </div>
+          <div class="psec">
+            <div class="ph" data-i18n-ph="ph-pagenum">Page numbers</div>
+            <div class="ptog"><input type="checkbox" id="pn-on" onchange="docUpdate()"><span data-i18n="lbl-show">Show</span></div>
+            <div class="pr"><label data-i18n="lbl-pos">Position</label>
+              <select class="ps" id="pn-pos" onchange="docUpdate()">
+                <option value="bc" id="opt-pn-bc">Bottom · center</option>
+                <option value="br" id="opt-pn-br">Bottom · right</option>
+                <option value="bl" id="opt-pn-bl">Bottom · left</option>
+                <option value="tc" id="opt-pn-tc">Top · center</option>
+              </select>
+            </div>
+            <div class="pr"><label data-i18n="lbl-style">Style</label>
+              <select class="ps" id="pn-sty" onchange="docUpdate()">
+                <option value="arabic">1, 2, 3…</option>
+                <option value="roman">i, ii…</option>
+                <option value="alpha">a, b, c…</option>
+              </select>
+            </div>
+            <div class="pr"><label data-i18n="lbl-prefix">Prefix</label><input class="pi" id="pn-pre" type="text" value="" style="text-align:left" oninput="docUpdate()"></div>
+            <div class="pr"><label data-i18n="lbl-start">Start</label><input class="pi" id="pn-st" type="number" value="1" min="1" style="width:52px" oninput="docUpdate()"></div>
+          </div>
+        </div>
+        <!-- BLOC TAB -->
+        <div class="panel-body hidden-pb" id="pb-bloc">
+          <div id="no-sel" class="empty-msg" style="padding:8px" data-i18n="click-a-block">Click on a block.</div>
+          <div id="bloc-p" style="display:none">
+            <div class="psec">
+              <div class="ph" data-i18n-ph="ph-spacing">Spacing</div>
+              <div class="pr"><label data-i18n="lbl-before">Before</label><input class="pi" id="bl-mt" type="number" value="0" min="0" max="40" step=".5" oninput="updBlSpc()"><span class="pu">mm</span></div>
+              <div class="pr"><label data-i18n="lbl-after">After</label><input class="pi" id="bl-mb" type="number" value="4" min="0" max="40" step=".5" oninput="updBlSpc()"><span class="pu">mm</span></div>
+              <div class="pr"><label data-i18n="lbl-indent">Indent</label><input class="pi" id="bl-ind" type="number" value="0" min="0" max="30" step=".5" oninput="updBlSpc()"><span class="pu">mm</span></div>
+            </div>
+            <div class="psec" id="doc-formula-sec" style="display:none">
+              <div class="ph" data-i18n-ph="ph-formula">Formula</div>
+              <div class="pr"><label data-i18n="lbl-bodysize">Size</label><input class="pi" id="df-sz" type="number" value="24" min="8" max="72" oninput="updDocFormula('sz',+this.value)"><span class="pu">px</span></div>
+              <div class="pr"><label data-i18n="lbl-align">Align.</label>
+                <select class="ps" id="df-al" onchange="updDocFormula('al',this.value)">
+                  <option value="c" id="opt-align-c">Centered</option>
+                  <option value="l" id="opt-align-l">Left</option>
+                  <option value="r" id="opt-align-r">Right</option>
+                </select>
+              </div>
+              <div class="ptog"><input type="checkbox" id="df-float" onchange="updDocFormula('float',this.checked)"><span data-i18n="lbl-floating">Floating (draggable)</span></div>
+            </div>
+          </div>
+        </div>
+        <!-- PRINT TAB -->
+        <div class="panel-body hidden-pb" id="pb-imp">
+          <div class="psec">
+            <div class="ph" data-i18n-ph="ph-bleed">Bleed &amp; marks</div>
+            <div class="ptog"><input type="checkbox" id="crop-on" onchange="docUpdate()"><span data-i18n="lbl-cropmarks">Crop marks</span></div>
+            <div class="ptog"><input type="checkbox" id="cross-on" onchange="docUpdate()"><span data-i18n="lbl-crossmarks">Registration marks</span></div>
+            <div class="pr"><label data-i18n="lbl-bleed">Bleed</label><input class="pi" id="bleed" type="number" value="3" min="0" max="20" step=".5" style="width:52px" oninput="docUpdate()"><span class="pu">mm</span></div>
+          </div>
+          <div class="psec">
+            <div class="ph" data-i18n-ph="ph-csspage">Generated CSS @page</div>
+            <textarea class="css-ta" id="css-out" readonly></textarea>
+          </div>
+          <div class="psec">
+            <button class="full-btn orange-btn" id="btn-preview-doc" onclick="openPM()">👁 Paged.js Preview</button>
+            <button class="full-btn grey-btn"   id="btn-export-doc"  style="margin-top:5px" onclick="exportHTML()">↓ Export HTML</button>
+          </div>
+        </div>
+      </div><!-- /doc-inspector -->
+
+    </div><!-- /panel-right -->
+
+  </div><!-- /work -->
+
+  <!-- STATUSBAR -->
+  <div id="bot">
+    <span class="st" id="st-mode">∑ Formulas</span>
+    <div class="stsep"></div>
+    <span class="st" id="st-info" data-i18n="st-zero-elements">0 element(s)</span>
+    <div class="stsep"></div>
+    <span class="st" id="st-hist">—</span>
+    <div id="zoom-c">
+      <button class="zbtn" onclick="setZoom(zoom-.1)">−</button>
+      <span class="zlbl" id="zlbl" onclick="setZoom(1)">100%</span>
+      <button class="zbtn" onclick="setZoom(zoom+.1)">+</button>
+      <button class="zfit" id="zfit-btn" onclick="fitPage()" data-i18n="btn-fit">Fit</button>
+    </div>
+  </div>
+
+</div><!-- /shell -->
+
+<!-- PRINT MODAL -->
+<div id="pm">
+  <div class="pm-box">
+    <div class="pm-bar">
+      <h3 id="pm-title" data-i18n="pm-title">Paged.js Preview</h3>
+      <span id="pm-info"></span>
+      <div class="pm-actions">
+        <button class="full-btn orange-btn" id="pm-print-btn" onclick="triggerPrint()" data-i18n="pm-print">🖨 Print</button>
+        <button class="full-btn grey-btn"   id="pm-close-btn" onclick="closePM()"     data-i18n="pm-close">Close</button>
+      </div>
+    </div>
+    <div id="pf-wrap"><iframe id="pframe" scrolling="yes"></iframe></div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<!-- Scripts -->
+<script src="https://cdn.jsdelivr.net/npm/opentype.js@1.3.4/dist/opentype.min.js"></script>
+<script src="all-scripts.js"></script>
+</body>
+</html>
