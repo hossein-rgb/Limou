@@ -736,3 +736,13 @@ body.mode-doc .abtn-acct.on { background: var(--doc-accent-soft); color: var(--d
 .auth-link { background: none; border: none; font-size: 11px; color: var(--accent); cursor: pointer; padding: 2px; }
 .auth-link:hover { text-decoration: underline; }
 .auth-who  { font-size: 12px; font-weight: 600; color: var(--text); margin-bottom: 4px; word-break: break-all; }
+
+/* Guest access — controls reserved to signed-in users (GUEST_ACCESS). Still clickable: opens "Sign in". */
+body.gl-export    [data-guest="export"],
+body.gl-fonts     [data-guest="fonts"],
+body.gl-print     [data-guest="print"],
+body.gl-equations [data-guest="equations"],
+body.gl-profiles  [data-guest="profiles"],
+body.gl-document  [data-guest="document"] { opacity: .45; }
+.auth-reason { font-size: 12px; font-weight: 600; color: var(--accent); background: var(--accent-soft); border-radius: 6px; padding: 7px 10px; margin: 4px 0 10px; }
+.auth-reason:empty { display: none; }

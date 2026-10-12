@@ -18,7 +18,7 @@
     <!-- Mode tabs -->
     <div class="mode-tabs">
       <button class="mode-tab on" id="mtab-fe"  onclick="switchMode('fe')">∑ Formulas</button>
-      <button class="mode-tab"    id="mtab-doc" onclick="switchMode('doc')">¶ Document</button>
+      <button class="mode-tab"    id="mtab-doc" onclick="if(_guestOK('document'))switchMode('doc')" data-guest="document">¶ Document</button>
     </div>
 
     <!-- FE toolbar (visible en mode Formules) -->
@@ -36,7 +36,7 @@
       <div class="tsep"></div>
       <button class="tbtn" onclick="feDelete()" data-i18n-title="tb-delete">✕</button>
       <div class="tsep"></div>
-      <button class="tbtn accent" id="tbInsDoc" onclick="insertToDoc()" data-i18n-title="tb-insert-doc">⇄ Doc</button>
+      <button class="tbtn accent" id="tbInsDoc" onclick="insertToDoc()" data-i18n-title="tb-insert-doc" data-guest="document">⇄ Doc</button>
     </div>
 
     <!-- DOC toolbar (visible en mode Document) -->
@@ -58,8 +58,8 @@
     </div>
 
     <div class="top-right">
-      <button class="abtn abtn-prev"  onclick="openPM()">Aperçu</button>
-      <button class="abtn abtn-print" onclick="openPM()">Imprimer</button>
+      <button class="abtn abtn-prev"  onclick="openPM()" data-guest="print">Aperçu</button>
+      <button class="abtn abtn-print" onclick="openPM()" data-guest="print">Imprimer</button>
       <div class="tsep"></div>
       <button class="abtn" id="btn-lang" onclick="toggleLang()" title="Switch language">FR</button>
       <button class="abtn abtn-acct" id="btn-account" onclick="authOpen()">Sign in</button>
@@ -92,8 +92,8 @@
       </div>
       <!-- Font import -->
       <div class="panel-body hidden-pb" id="fe-pb-font">
-        <div class="font-dz" id="font-dz"
-          onclick="document.getElementById('font-file-inp').click()"
+        <div class="font-dz" id="font-dz" data-guest="fonts"
+          onclick="fontPick()"
           ondragover="event.preventDefault();this.classList.add('dov')"
           ondragleave="this.classList.remove('dov')"
           ondrop="fontDrop(event)">
@@ -106,8 +106,8 @@
       <!-- Profiles -->
       <div class="panel-body hidden-pb" id="fe-pb-profiles">
         <div id="profiles-list"></div>
-        <button class="add-layer-btn" onclick="saveProfile()">💾 Save current profile</button>
-        <button class="add-layer-btn" style="margin-top:4px" onclick="exportProfiles()">↓ Export JSON</button>
+        <button class="add-layer-btn" onclick="saveProfile()" data-guest="profiles">💾 Save current profile</button>
+        <button class="add-layer-btn" style="margin-top:4px" onclick="exportProfiles()" data-guest="export">↓ Export JSON</button>
       </div>
 
       <!-- Layers -->
@@ -118,7 +118,7 @@
       <!-- Equations -->
       <div class="panel-body hidden-pb" id="fe-pb-equations">
         <div id="equations-list"></div>
-        <button class="add-layer-btn" id="eq-save-btn" onclick="saveEquation()">💾 Save selection</button>
+        <button class="add-layer-btn" id="eq-save-btn" onclick="saveEquation()" data-guest="equations">💾 Save selection</button>
       </div>
 
       <!-- DOC left tabs (hidden until doc mode) -->
@@ -143,8 +143,8 @@
       </div>
       <!-- DOC tab: font — isolated container, never shares IDs with FE font panel -->
       <div class="panel-body hidden-pb" id="doc-pb-font">
-        <div class="font-dz" id="doc-font-dz"
-          onclick="document.getElementById('font-file-inp').click()"
+        <div class="font-dz" id="doc-font-dz" data-guest="fonts"
+          onclick="fontPick()"
           ondragover="event.preventDefault();this.classList.add('dov')"
           ondragleave="this.classList.remove('dov')"
           ondrop="fontDrop(event)">
@@ -540,8 +540,8 @@
             <textarea class="css-ta" id="css-out" readonly></textarea>
           </div>
           <div class="psec">
-            <button class="full-btn orange-btn" id="btn-preview-doc" onclick="openPM()">👁 Paged.js Preview</button>
-            <button class="full-btn grey-btn"   id="btn-export-doc"  style="margin-top:5px" onclick="exportHTML()">↓ Export HTML</button>
+            <button class="full-btn orange-btn" id="btn-preview-doc" onclick="openPM()" data-guest="print">👁 Paged.js Preview</button>
+            <button class="full-btn grey-btn"   id="btn-export-doc"  style="margin-top:5px" onclick="exportHTML()" data-guest="export">↓ Export HTML</button>
           </div>
         </div>
       </div><!-- /doc-inspector -->
@@ -593,6 +593,7 @@
     <!-- Signed out -->
     <div id="auth-out">
       <h3 class="auth-h" id="auth-title">Sign in to Limou</h3>
+      <p class="auth-reason" id="auth-reason"></p>
       <p class="auth-sub" data-i18n="auth-sub">Your formulas, documents, fonts and profiles are saved in your account.</p>
       <button class="auth-btn auth-alt" onclick="authGoogle()" data-i18n="auth-google">Continue with Google</button>
       <div class="auth-or"><span data-i18n="auth-or">or</span></div>

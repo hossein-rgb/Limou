@@ -18,6 +18,19 @@ const BLOCK_ICON = {text:'¶',title:'H1',h2:'H2',formula:'∑','canvas-textbox':
 const BLOCK_BG   = {text:'#eee',title:'rgba(55,138,221,.13)',h2:'rgba(55,138,221,.08)',formula:'rgba(29,158,117,.13)','canvas-textbox':'rgba(123,200,0,.13)','eq-snapshot':'rgba(29,158,117,.13)'};
 const BLOCK_CLR  = {text:'#aaa',title:'#378ADD',h2:'#378ADD',formula:'#1D9E75','canvas-textbox':'#7BC800','eq-snapshot':'#1D9E75'};
 
+// ── Guest access — what visitors WITHOUT an account may use ───────────────────
+// true  = open to everyone
+// false = reserved to signed-in users (guests see the button dimmed; clicking it opens "Sign in")
+// Signed-in users always have everything. Change a value, commit, done.
+const GUEST_ACCESS = {
+  export:    false, // Export HTML, export SVG, export profiles (JSON)
+  fonts:     false, // Import custom fonts
+  print:     true,  // Paged.js preview & print
+  equations: true,  // Save equations
+  profiles:  true,  // Save profiles
+  document:  true,  // ¶ Document mode and the ⇄ Doc button
+};
+
 // ── Education levels ──────────────────────────────────────────────────────────
 // 4 levels: 0=elementary, 1=middle, 2=high, 3=advanced
 // lvl on each key = minimum level required to see it
@@ -624,6 +637,7 @@ function _saveEq(){try{localStorage.setItem('limou-eq',JSON.stringify(_equations
 
 // ── Save current selection (or whole canvas if nothing selected) ──────────────
 function saveEquation(){
+  if(!_guestOK('equations'))return;
   const toSave = feSelIds.size
     ? feEls.filter(e => feSelIds.has(e.id))
     : feEls;
@@ -702,6 +716,7 @@ function renderEquations(){
     svgBtn.className = 'l-ico eq-svg-btn';
     svgBtn.textContent = 'SVG';
     svgBtn.title = t('eq-svg-title');
+    svgBtn.dataset.guest = 'export';
     svgBtn.onclick = ev => { ev.stopPropagation(); exportEqSVG(eq.id); };
 
     const delBtn = document.createElement('span');
@@ -887,6 +902,7 @@ function _insertEqAt(eq, originX, originY){
 // CDN declaration so it renders correctly in browsers. For Figma / Illustrator /
 // Inkscape we also include a <text> fallback layer with the raw Unicode symbols.
 function exportEqSVG(id){
+  if(!_guestOK('export'))return;
   const eq = _equations.find(e => e.id === id); if(!eq) return;
 
   // ── 1. Render at 2× for sharp export ────────────────────────────────────────
@@ -1540,6 +1556,7 @@ function _textboxToDocBlock(rd,existingId){
 }
 
 function insertToDoc(){
+  if(!_guestOK('document'))return;
   if(!feEls.length){toast(t('canvas-empty'));return;}
 
   docSnap(); // save pre-sync state for undo
@@ -2463,6 +2480,8 @@ function fontDrop(ev){
   ev.preventDefault();g('font-dz')?.classList.remove('dov');
   const f=ev.dataTransfer?.files?.[0];if(f)processFont(f);
 }
+// Click on a font drop zone → file picker (only if fonts are allowed)
+function fontPick(){if(_guestOK('fonts'))g('font-file-inp').click();}
 function loadFontFile(inp){
   const f=inp?.files?.[0];if(f)processFont(f);inp.value='';
 }
@@ -2472,6 +2491,7 @@ function loadFontFile(inp){
 //   label  → display name;  silent → no toast;  cloud → already stored online
 // Returns the font entry (or null on duplicate/error).
 async function processFont(file,opts={}){
+  if(!opts.cloud&&!_guestOK('fonts'))return null; // fonts restored from the account are never blocked
   try{
     const ab=await file.arrayBuffer();
     // Same file imported twice → reuse (content hash, not file name)
@@ -4582,6 +4602,12 @@ const _I18N = {
   'font-too-big':         {en:'Font too large to save online (max 4 MB) · kept on this device only', fr:'Fonte trop lourde pour l\'enregistrement en ligne (max 4 Mo) · gardée sur cet appareil'},
   'font-upload-error':    {en:'Could not save the font online · kept on this device only', fr:'Impossible d\'enregistrer la fonte en ligne · gardée sur cet appareil'},
   'font-restore-error':   {en:'A saved font could not be loaded:', fr:'Une fonte enregistrée n\'a pas pu être chargée :'},
+  'guest-export':         {en:'Sign in to export your work.',          fr:'Connectez-vous pour exporter votre travail.'},
+  'guest-fonts':          {en:'Sign in to import your own fonts.',     fr:'Connectez-vous pour importer vos propres fontes.'},
+  'guest-print':          {en:'Sign in to preview and print.',         fr:'Connectez-vous pour l\'aperçu et l\'impression.'},
+  'guest-equations':      {en:'Sign in to save equations.',            fr:'Connectez-vous pour enregistrer des équations.'},
+  'guest-profiles':       {en:'Sign in to save profiles.',             fr:'Connectez-vous pour enregistrer des profils.'},
+  'guest-document':       {en:'Sign in to use Document mode.',         fr:'Connectez-vous pour utiliser le mode Document.'},
 };
 
 // ── ID list for simple textContent swap ──────────────────────────────────────
@@ -4752,6 +4778,7 @@ function _applyLang(){
 ════════════════════════════════════════════════════ */
 
 function openPM(){
+  if(!_guestOK('print'))return;
   if(appMode === 'fe') _openFEPreview();
   else                 _openDocPreview();
 }
@@ -4878,6 +4905,7 @@ ${html}
 
 /* ── Export HTML autonome ── */
 function exportHTML(){
+  if(!_guestOK('export'))return;
   const title = g('doc-title')?.value || 'document';
   let   css, html, suffix;
 
@@ -5005,6 +5033,7 @@ function _buildDocHTML(){
 
 'use strict';
 function saveProfile(){
+  if(!_guestOK('profiles'))return;
   if(!feSelId){toast(t('select-element'));return;}
   const rd=feEls.find(e=>e.id===feSelId);if(!rd)return;
   const name=prompt(t('profile-name-prompt'),rd.node.lbl||rd.node.k);
@@ -5041,6 +5070,7 @@ function applyProfile(name){
 }
 
 function exportProfiles(){
+  if(!_guestOK('export'))return;
   const data=JSON.stringify({profiles,layers:layers.map(l=>({...l}))},null,2);
   const a=document.createElement('a');
   a.href=URL.createObjectURL(new Blob([data],{type:'application/json'}));
@@ -5228,7 +5258,7 @@ const _AUTH_ERR={
   'auth/email-already-in-use':'exists','auth/weak-password':'weak','auth/invalid-email':'email','auth/missing-email':'email',
   'auth/popup-blocked':'popup','auth/too-many-requests':'many','auth/network-request-failed':'offline',
 };
-const _cloud={fbP:null,fb:null,user:null,ready:false,busy:false,mode:'in',status:'guest',lastWs:'',lastLib:''};
+const _cloud={fbP:null,fb:null,user:null,ready:false,busy:false,mode:'in',status:'guest',reason:'',lastWs:'',lastLib:''};
 
 // ── Firebase SDK — loaded once from the CDN (no build step) ──────────────────
 function _fbLoad(){
@@ -5382,8 +5412,21 @@ async function cloudSignOut(){
   location.reload();
 }
 
+// ── Guest access (GUEST_ACCESS in config) ────────────────────────────────────
+// true → go on. false → the sign-in dialog opens, explaining what the feature needs.
+function _guestOK(feature){
+  if(_cloud.user||GUEST_ACCESS[feature]!==false)return true;
+  authOpen(feature);
+  return false;
+}
+
 // ── Sign-in dialog ───────────────────────────────────────────────────────────
-function authOpen(){g('auth-m')?.classList.add('show');_authErr('');if(!_cloud.user)setTimeout(()=>g('auth-email')?.focus(),50);}
+// reason (optional) = a GUEST_ACCESS feature → shows why signing in is needed
+function authOpen(reason){
+  _cloud.reason=typeof reason==='string'?reason:'';_cloudUIUpdate();
+  g('auth-m')?.classList.add('show');_authErr('');
+  if(!_cloud.user)setTimeout(()=>g('auth-email')?.focus(),50);
+}
 function authClose(){g('auth-m')?.classList.remove('show');const p=g('auth-pass');if(p)p.value='';}
 function authToggleMode(){_cloud.mode=_cloud.mode==='up'?'in':'up';_authErr('');_cloudUIUpdate();}
 function _authErr(msg){const el=g('auth-err');if(el)el.textContent=msg||'';}
@@ -5429,7 +5472,10 @@ function _cloudUIUpdate(){
   set('auth-submit',up?'auth-submit-up':'auth-submit-in');
   set('auth-toggle',up?'auth-to-in':'auth-to-up');
   const fg=g('auth-forgot');if(fg)fg.style.display=up?'none':'';
+  const rs=g('auth-reason');if(rs)rs.textContent=_cloud.reason?t('guest-'+_cloud.reason):'';
   const pw=g('auth-pass');if(pw)pw.autocomplete=up?'new-password':'current-password';
+  // Dim every [data-guest="feature"] control that guests can't use (CSS: body.gl-<feature>)
+  Object.keys(GUEST_ACCESS).forEach(f=>document.body.classList.toggle('gl-'+f,!u&&GUEST_ACCESS[f]===false));
   _cloudStatus(_cloud.status);
 }
 
