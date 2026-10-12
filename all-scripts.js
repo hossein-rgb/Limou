@@ -25,9 +25,9 @@ const BLOCK_CLR  = {text:'#aaa',title:'#378ADD',h2:'#378ADD',formula:'#1D9E75','
 const GUEST_ACCESS = {
   export:    false, // Export HTML, export SVG, export profiles (JSON)
   fonts:     false, // Import custom fonts
-  print:     true,  // Paged.js preview & print
+  print:     false,  // Paged.js preview & print
   equations: true,  // Save equations
-  profiles:  true,  // Save profiles
+  profiles:  false,  // Save profiles
   document:  true,  // ¶ Document mode and the ⇄ Doc button
 };
 
