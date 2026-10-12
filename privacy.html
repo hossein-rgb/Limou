@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Limou — Privacy</title>
+<style>
+  :root { --yellow:#E8D800; --accent:#6A5A00; --soft:#FFF79A; --text:#2A2600; --text2:#555; --line:#e8e6d8; --bg:#FAFAF5; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, 'Helvetica Neue', Arial, sans-serif; font-size: 15px; line-height: 1.65; color: var(--text); background: var(--bg); }
+  header { position: sticky; top: 0; z-index: 2; background: var(--yellow); border-bottom: 1px solid rgba(0,0,0,.08); }
+  .bar { max-width: 760px; margin: 0 auto; padding: 10px 20px; display: flex; align-items: center; gap: 10px; }
+  .mark { width: 28px; height: 28px; border-radius: 6px; background: var(--yellow); box-shadow: 0 1px 4px rgba(0,0,0,.18); display: flex; align-items: center; justify-content: center; font-weight: 800; color: #000; text-decoration: none; }
+  .name { font-weight: 600; color: rgba(0,0,0,.75); text-decoration: none; }
+  .bar .sp { flex: 1; }
+  .btn { border: none; border-radius: 6px; padding: 6px 12px; font-size: 13px; font-weight: 600; cursor: pointer; background: rgba(0,0,0,.1); color: rgba(0,0,0,.75); text-decoration: none; }
+  .btn:hover { background: rgba(0,0,0,.16); }
+  main { max-width: 760px; margin: 0 auto; padding: 36px 20px 64px; }
+  h1 { font-size: 28px; letter-spacing: -.3px; margin-bottom: 6px; }
+  .meta { color: var(--text2); font-size: 13px; margin-bottom: 28px; }
+  .intro { background: var(--soft); border-radius: 10px; padding: 14px 18px; margin-bottom: 30px; }
+  h2 { font-size: 17px; margin: 30px 0 8px; padding-top: 18px; border-top: 1px solid var(--line); }
+  p, li { color: var(--text); }
+  p + p { margin-top: 8px; }
+  ul { padding-left: 20px; margin-top: 6px; }
+  li { margin: 4px 0; }
+  a { color: var(--accent); }
+  table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 14px; }
+  th, td { text-align: left; vertical-align: top; padding: 8px 10px; border-bottom: 1px solid var(--line); }
+  th { font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: var(--text2); }
+  [lang]:not(html) { display: none; }
+  html[data-l="en"] [lang="en"], html[data-l="fr"] [lang="fr"] { display: revert; }
+  @media (max-width: 560px) { table, tbody, tr, td { display: block; } thead { display: none; } td { border: none; padding: 2px 0; } tr { border-bottom: 1px solid var(--line); padding: 8px 0; } }
+</style>
+</head>
+<body>
+<header>
+  <div class="bar">
+    <a class="mark" href="/">L</a><a class="name" href="/">Limou</a>
+    <span class="sp"></span>
+    <button class="btn" id="lang" type="button">FR</button>
+    <a class="btn" href="/"><span lang="en">Open Limou</span><span lang="fr">Ouvrir Limou</span></a>
+  </div>
+</header>
+
+<main>
+<!-- ═════════════════════════════ ENGLISH ═════════════════════════════ -->
+<div lang="en">
+  <h1>Privacy policy</h1>
+  <p class="meta">Last updated: 12 October 2026</p>
+  <p class="intro">In short: you can use Limou without an account, and then nothing you create leaves your device. If you create an account, your work and fonts are stored so you can find them again on any device. Your data is never sold, never used for advertising, and your fonts are visible only to you.</p>
+
+  <h2>1. Who is responsible</h2>
+  <p>Limou is published by <strong>Hossein Mousavi</strong>, founder of Limou, who is responsible for the processing of personal data on this site (data controller).<br>
+  Contact for any privacy question: <a href="mailto:Hossein_mousavi@icloud.com">Hossein_mousavi@icloud.com</a></p>
+
+  <h2>2. What data is collected</h2>
+  <table>
+    <thead><tr><th>Data</th><th>When</th><th>Why</th></tr></thead>
+    <tbody>
+      <tr><td>Email address, and name if you sign in with Google</td><td>When you create an account</td><td>To identify your account and let you sign in</td></tr>
+      <tr><td>Password</td><td>Email sign-in</td><td>Handled entirely by Google Firebase Authentication. Limou never sees or stores your password</td></tr>
+      <tr><td>Your work: formulas, canvas, layers, documents, page settings, saved equations, profiles</td><td>While you are signed in (automatic saving)</td><td>To keep your work and restore it on any device</td></tr>
+      <tr><td>Font files you import, and their settings</td><td>When you import a font while signed in, after your confirmation</td><td>To make your fonts available again in your account. Each font is stored privately: only you can access it</td></tr>
+      <tr><td>Technical data (IP address, browser type, date and time of requests)</td><td>When you visit the site</td><td>Hosting, security and abuse prevention, kept in server logs for a short time</td></tr>
+    </tbody>
+  </table>
+  <p>Without an account, your work, preferences (language, keyboard level, default size) and saved equations stay in your own browser's storage and are never sent to us.</p>
+  <p>Limou uses <strong>no advertising, no analytics trackers and no third-party marketing cookies</strong>. The browser storage used by Limou and by the sign-in service is strictly necessary for the service to work.</p>
+
+  <h2>3. Legal basis</h2>
+  <ul>
+    <li><strong>Providing the service you request</strong> (account, saving and restoring your work and fonts): performance of a contract, GDPR art. 6(1)(b).</li>
+    <li><strong>Security of the service</strong> (technical logs): legitimate interest, GDPR art. 6(1)(f).</li>
+  </ul>
+
+  <h2>4. Service providers</h2>
+  <p>Limou relies on the following providers, who process data only on Limou's behalf:</p>
+  <ul>
+    <li><strong>Google Firebase</strong> (Google Ireland Ltd / Google LLC): sign-in (Firebase Authentication) and storage of your work (Cloud Firestore, located in the European Union, multi-region <em>eur3</em>).</li>
+    <li><strong>Vercel Inc.</strong>: website hosting, server functions, and private storage of your font files.</li>
+  </ul>
+  <p>Some of these providers are based in the United States, and some data may be processed outside the European Union. Such transfers rely on the safeguards provided by the GDPR, such as the EU–US Data Privacy Framework and/or the European Commission's standard contractual clauses.</p>
+
+  <h2>5. Your fonts</h2>
+  <p>Before a font is saved to your account, you confirm that you have the right to use it. You remain responsible for complying with the font's license. Fonts are stored privately in your account, are never shared with other users, and are not used for any other purpose.</p>
+
+  <h2>6. How long data is kept</h2>
+  <ul>
+    <li>Account data, work and fonts: as long as your account exists. When you ask for your account to be deleted, your data is deleted within 30 days.</li>
+    <li>Technical logs: a short period set by the hosting provider, for security purposes.</li>
+  </ul>
+
+  <h2>7. Your rights</h2>
+  <p>Under the GDPR you have the right to access, rectify and erase your data, to receive it in a portable format, to restrict or object to its processing. To exercise these rights, including deleting your account, write to <a href="mailto:Hossein_mousavi@icloud.com">Hossein_mousavi@icloud.com</a>. You will receive an answer within one month.</p>
+  <p>If you believe your rights are not respected, you can lodge a complaint with the French data protection authority, the <a href="https://www.cnil.fr" rel="noopener">CNIL</a>.</p>
+
+  <h2>8. Security</h2>
+  <p>Data is transmitted over encrypted connections (HTTPS). Access to your stored work and fonts is restricted to your own signed-in account.</p>
+
+  <h2>9. Changes</h2>
+  <p>This policy may be updated as Limou evolves. The date at the top of the page shows the latest version.</p>
+</div>
+
+<!-- ═════════════════════════════ FRANÇAIS ═════════════════════════════ -->
+<div lang="fr">
+  <h1>Politique de confidentialité</h1>
+  <p class="meta">Dernière mise à jour : 12 octobre 2026</p>
+  <p class="intro">En bref : vous pouvez utiliser Limou sans compte, et rien de ce que vous créez ne quitte alors votre appareil. Si vous créez un compte, votre travail et vos fontes sont enregistrés pour que vous les retrouviez sur n'importe quel appareil. Vos données ne sont jamais vendues ni utilisées à des fins publicitaires, et vos fontes ne sont visibles que par vous.</p>
+
+  <h2>1. Responsable du traitement</h2>
+  <p>Limou est édité par <strong>Hossein Mousavi</strong>, fondateur de Limou, responsable du traitement des données personnelles sur ce site.<br>
+  Contact pour toute question relative à vos données : <a href="mailto:Hossein_mousavi@icloud.com">Hossein_mousavi@icloud.com</a></p>
+
+  <h2>2. Données collectées</h2>
+  <table>
+    <thead><tr><th>Données</th><th>Quand</th><th>Pourquoi</th></tr></thead>
+    <tbody>
+      <tr><td>Adresse e-mail, et nom si vous vous connectez avec Google</td><td>À la création d'un compte</td><td>Identifier votre compte et vous permettre de vous connecter</td></tr>
+      <tr><td>Mot de passe</td><td>Connexion par e-mail</td><td>Géré entièrement par Google Firebase Authentication. Limou ne voit ni ne conserve jamais votre mot de passe</td></tr>
+      <tr><td>Votre travail : formules, canevas, couches, documents, réglages de page, équations et profils enregistrés</td><td>Lorsque vous êtes connecté (enregistrement automatique)</td><td>Conserver votre travail et le restaurer sur n'importe quel appareil</td></tr>
+      <tr><td>Fichiers de fontes importés et leurs réglages</td><td>Lorsque vous importez une fonte en étant connecté, après votre confirmation</td><td>Retrouver vos fontes dans votre compte. Chaque fonte est stockée de manière privée : vous seul y avez accès</td></tr>
+      <tr><td>Données techniques (adresse IP, type de navigateur, date et heure des requêtes)</td><td>Lors de vos visites</td><td>Hébergement, sécurité et prévention des abus, conservées peu de temps dans les journaux du serveur</td></tr>
+    </tbody>
+  </table>
+  <p>Sans compte, votre travail, vos préférences (langue, niveau du clavier, taille par défaut) et vos équations enregistrées restent dans le stockage de votre navigateur et ne nous sont jamais transmis.</p>
+  <p>Limou n'utilise <strong>aucune publicité, aucun outil de mesure d'audience et aucun cookie marketing tiers</strong>. Le stockage du navigateur utilisé par Limou et par le service de connexion est strictement nécessaire au fonctionnement du service.</p>
+
+  <h2>3. Base légale</h2>
+  <ul>
+    <li><strong>Fourniture du service demandé</strong> (compte, enregistrement et restauration de votre travail et de vos fontes) : exécution d'un contrat, art. 6.1.b du RGPD.</li>
+    <li><strong>Sécurité du service</strong> (journaux techniques) : intérêt légitime, art. 6.1.f du RGPD.</li>
+  </ul>
+
+  <h2>4. Prestataires</h2>
+  <p>Limou s'appuie sur les prestataires suivants, qui traitent les données uniquement pour le compte de Limou :</p>
+  <ul>
+    <li><strong>Google Firebase</strong> (Google Ireland Ltd / Google LLC) : connexion (Firebase Authentication) et stockage de votre travail (Cloud Firestore, situé dans l'Union européenne, multirégion <em>eur3</em>).</li>
+    <li><strong>Vercel Inc.</strong> : hébergement du site, fonctions serveur et stockage privé de vos fichiers de fontes.</li>
+  </ul>
+  <p>Certains de ces prestataires sont établis aux États-Unis, et certaines données peuvent être traitées hors de l'Union européenne. Ces transferts reposent sur les garanties prévues par le RGPD, telles que le cadre de protection des données UE–États-Unis (Data Privacy Framework) et/ou les clauses contractuelles types de la Commission européenne.</p>
+
+  <h2>5. Vos fontes</h2>
+  <p>Avant qu'une fonte soit enregistrée dans votre compte, vous confirmez avoir le droit de l'utiliser. Vous restez responsable du respect de sa licence. Les fontes sont stockées de manière privée dans votre compte, ne sont jamais partagées avec d'autres utilisateurs et ne sont utilisées à aucune autre fin.</p>
+
+  <h2>6. Durée de conservation</h2>
+  <ul>
+    <li>Données du compte, travail et fontes : tant que votre compte existe. Lorsque vous demandez la suppression de votre compte, vos données sont supprimées sous 30 jours.</li>
+    <li>Journaux techniques : une courte durée fixée par l'hébergeur, à des fins de sécurité.</li>
+  </ul>
+
+  <h2>7. Vos droits</h2>
+  <p>Conformément au RGPD, vous disposez d'un droit d'accès, de rectification, d'effacement, de portabilité, de limitation et d'opposition. Pour les exercer, y compris pour supprimer votre compte, écrivez à <a href="mailto:Hossein_mousavi@icloud.com">Hossein_mousavi@icloud.com</a>. Une réponse vous sera apportée dans un délai d'un mois.</p>
+  <p>Si vous estimez que vos droits ne sont pas respectés, vous pouvez adresser une réclamation à la <a href="https://www.cnil.fr" rel="noopener">CNIL</a>.</p>
+
+  <h2>8. Sécurité</h2>
+  <p>Les données sont transmises par des connexions chiffrées (HTTPS). L'accès à votre travail et à vos fontes enregistrés est limité à votre propre compte connecté.</p>
+
+  <h2>9. Modifications</h2>
+  <p>Cette politique peut évoluer avec Limou. La date en haut de page indique la dernière version.</p>
+</div>
+</main>
+
+<script>
+  // Same language as Limou (localStorage 'limou-lang'), else the browser's language
+  let l;
+  try { l = localStorage.getItem('limou-lang'); } catch (_) {}
+  if (l !== 'en' && l !== 'fr') l = (navigator.language || '').startsWith('fr') ? 'fr' : 'en';
+  const set = v => {
+    l = v;
+    document.documentElement.dataset.l = v;
+    document.documentElement.lang = v;
+    document.getElementById('lang').textContent = v === 'en' ? 'FR' : 'EN';
+    document.title = v === 'en' ? 'Limou — Privacy' : 'Limou — Confidentialité';
+    try { localStorage.setItem('limou-lang', v); } catch (_) {}
+  };
+  document.getElementById('lang').onclick = () => set(l === 'en' ? 'fr' : 'en');
+  set(l);
+</script>
+</body>
+</html>

@@ -4579,6 +4579,7 @@ const _I18N = {
   'auth-account':         {en:'Your account',               fr:'Votre compte'},
   'auth-signout':         {en:'Sign out',                   fr:'Se déconnecter'},
   'auth-close':           {en:'Close',                      fr:'Fermer'},
+  'auth-privacy':         {en:'Privacy policy',             fr:'Politique de confidentialité'},
   'auth-welcome':         {en:'Signed in',                  fr:'Connecté'},
   'auth-err-invalid':     {en:'Wrong email or password.',   fr:'E-mail ou mot de passe incorrect.'},
   'auth-err-exists':      {en:'An account already exists with this email.', fr:'Un compte existe déjà avec cet e-mail.'},
