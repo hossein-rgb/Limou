@@ -62,6 +62,7 @@
       <button class="abtn abtn-print" onclick="openPM()">Imprimer</button>
       <div class="tsep"></div>
       <button class="abtn" id="btn-lang" onclick="toggleLang()" title="Switch language">FR</button>
+      <button class="abtn abtn-acct" id="btn-account" onclick="authOpen()">Sign in</button>
     </div>
   </div>
 
@@ -556,6 +557,8 @@
     <span class="st" id="st-info" data-i18n="st-zero-elements">0 element(s)</span>
     <div class="stsep"></div>
     <span class="st" id="st-hist">—</span>
+    <div class="stsep"></div>
+    <span class="st" id="st-sync"></span>
     <div id="zoom-c">
       <button class="zbtn" onclick="setZoom(zoom-.1)">−</button>
       <span class="zlbl" id="zlbl" onclick="setZoom(1)">100%</span>
@@ -578,6 +581,40 @@
       </div>
     </div>
     <div id="pf-wrap"><iframe id="pframe" scrolling="yes"></iframe></div>
+  </div>
+</div>
+
+<!-- ACCOUNT MODAL (sign in / create account / signed-in view) -->
+<div id="auth-m" onclick="if(event.target===this)authClose()">
+  <div class="auth-box" id="auth-box" role="dialog" aria-modal="true" aria-labelledby="auth-title">
+    <button class="panel-x auth-x" onclick="authClose()" data-i18n-title="auth-close">✕</button>
+    <div class="logo-mark auth-logo">L</div>
+
+    <!-- Signed out -->
+    <div id="auth-out">
+      <h3 class="auth-h" id="auth-title">Sign in to Limou</h3>
+      <p class="auth-sub" data-i18n="auth-sub">Your formulas, documents, fonts and profiles are saved in your account.</p>
+      <button class="auth-btn auth-alt" onclick="authGoogle()" data-i18n="auth-google">Continue with Google</button>
+      <div class="auth-or"><span data-i18n="auth-or">or</span></div>
+      <form class="auth-form" onsubmit="authEmail(event)">
+        <input class="auth-inp" id="auth-email" type="email" autocomplete="email" required data-i18n-placeholder="auth-email" placeholder="Email">
+        <input class="auth-inp" id="auth-pass" type="password" autocomplete="current-password" minlength="6" required data-i18n-placeholder="auth-pass" placeholder="Password (6+ characters)">
+        <button class="auth-btn auth-main" id="auth-submit" type="submit">Sign in</button>
+      </form>
+      <div class="auth-err" id="auth-err" role="alert"></div>
+      <div class="auth-links">
+        <button type="button" class="auth-link" id="auth-toggle" onclick="authToggleMode()">No account yet? Create one</button>
+        <button type="button" class="auth-link" id="auth-forgot" onclick="authForgot()" data-i18n="auth-forgot">Forgot password?</button>
+      </div>
+    </div>
+
+    <!-- Signed in -->
+    <div id="auth-in" class="hidden-pb">
+      <h3 class="auth-h" data-i18n="auth-account">Your account</h3>
+      <div class="auth-who" id="auth-who"></div>
+      <div class="auth-sub" id="auth-sync"></div>
+      <button class="auth-btn auth-alt" onclick="cloudSignOut()" data-i18n="auth-signout">Sign out</button>
+    </div>
   </div>
 </div>
 

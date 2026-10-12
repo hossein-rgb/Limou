@@ -1,0 +1,10 @@
+{
+  "name": "limou",
+  "private": true,
+  "type": "module",
+  "description": "Limou — server functions only (/api). The editor itself has no build step.",
+  "dependencies": {
+    "@vercel/blob": "^2.6.1",
+    "jose": "^6.0.0"
+  }
+}

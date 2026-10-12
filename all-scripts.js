@@ -2467,24 +2467,33 @@ function loadFontFile(inp){
   const f=inp?.files?.[0];if(f)processFont(f);inp.value='';
 }
 
-async function processFont(file){
+// opts (all optional) — used when a font is restored from the user's account:
+//   name   → reuse the saved CSS family name, so layers/equations that reference it keep working
+//   label  → display name;  silent → no toast;  cloud → already stored online
+// Returns the font entry (or null on duplicate/error).
+async function processFont(file,opts={}){
   try{
     const ab=await file.arrayBuffer();
+    // Same file imported twice → reuse (content hash, not file name)
+    const hash=await _sha256Hex(ab);
+    if(loadedFonts.some(f=>f.hash===hash)){if(!opts.silent)toast(t('font-dup'));return null;}
     // Deux copies : une pour FontFace (sera consumée), une pour opentype.js
     const abForFace=ab.slice(0);
     const abForParse=ab.slice(0);
 
-    const name='CF_'+Date.now();
+    const name=opts.name||'CF_'+Date.now();
     const ff=new FontFace(name,abForFace);
     await ff.load();
     document.fonts.add(ff);
 
     const fd={
       name,
-      label:file.name.replace(/\.[^.]+$/,''),
+      label:opts.label||file.name.replace(/\.[^.]+$/,''),
       css:`'${name}',serif`,
       axes:[],   // [{tag, label, min, max, def, val}]
       fvs:'',
+      hash,
+      _cloud:!!opts.cloud, // true once the file is stored in the user's account
       _otf:null  // référence opentype.js — stockée par fonte, pas globale
     };
 
@@ -2533,11 +2542,20 @@ async function processFont(file){
     if(typeof _clearDelimCaches==='function')_clearDelimCaches();
     loadedFonts.push(fd);
     renderFontList();
-    toast(t('font-imported')+' '+fd.label+(fd.axes.length?' ('+fd.axes.length+' axes)':''));
+    if(!opts.silent)toast(t('font-imported')+' '+fd.label+(fd.axes.length?' ('+fd.axes.length+' axes)':''));
+    if(!fd._cloud)_cloudFontAdded(fd,ab);
+    return fd;
   }catch(e){
     console.error('[Limou] processFont error:',e);
-    toast(t('font-error')+' '+e.message);
+    if(!opts.silent)toast(t('font-error')+' '+e.message);
+    return null;
   }
+}
+
+// SHA-256 of a font file, as hex — identifies a font by its content
+async function _sha256Hex(ab){
+  const h=await crypto.subtle.digest('SHA-256',ab);
+  return [...new Uint8Array(h)].map(b=>b.toString(16).padStart(2,'0')).join('');
 }
 
 // ── Fallback parseur fvar binaire (Fixed 16.16 correctement lu) ─────────────
@@ -4521,6 +4539,49 @@ const _I18N = {
   'multi-mixed':          {en:'(Mixed)',                    fr:'(Mixte)'},
   'multi-del-btn':        {en:'Delete all',                 fr:'Tout supprimer'},
   'multi-dup-btn':        {en:'Duplicate all',              fr:'Tout dupliquer'},
+
+  /* ── Account (sign-in, cloud save) ── */
+  'auth-signin-btn':      {en:'Sign in',                    fr:'Se connecter'},
+  'auth-title':           {en:'Sign in to Limou',           fr:'Se connecter à Limou'},
+  'auth-title-up':        {en:'Create your Limou account',  fr:'Créer votre compte Limou'},
+  'auth-sub':             {en:'Your formulas, documents, fonts and profiles are saved in your account.', fr:'Vos formules, documents, fontes et profils sont enregistrés dans votre compte.'},
+  'auth-google':          {en:'Continue with Google',       fr:'Continuer avec Google'},
+  'auth-or':              {en:'or',                         fr:'ou'},
+  'auth-email':           {en:'Email',                      fr:'E-mail'},
+  'auth-pass':            {en:'Password (6+ characters)',   fr:'Mot de passe (6 caractères min.)'},
+  'auth-submit-in':       {en:'Sign in',                    fr:'Se connecter'},
+  'auth-submit-up':       {en:'Create account',             fr:'Créer le compte'},
+  'auth-to-up':           {en:'No account yet? Create one', fr:'Pas encore de compte ? En créer un'},
+  'auth-to-in':           {en:'Already have an account? Sign in', fr:'Déjà un compte ? Se connecter'},
+  'auth-forgot':          {en:'Forgot password?',           fr:'Mot de passe oublié ?'},
+  'auth-reset-sent':      {en:'Password reset email sent',  fr:'E-mail de réinitialisation envoyé'},
+  'auth-need-email':      {en:'Enter your email first',     fr:'Saisissez d\'abord votre e-mail'},
+  'auth-account':         {en:'Your account',               fr:'Votre compte'},
+  'auth-signout':         {en:'Sign out',                   fr:'Se déconnecter'},
+  'auth-close':           {en:'Close',                      fr:'Fermer'},
+  'auth-welcome':         {en:'Signed in',                  fr:'Connecté'},
+  'auth-err-invalid':     {en:'Wrong email or password.',   fr:'E-mail ou mot de passe incorrect.'},
+  'auth-err-exists':      {en:'An account already exists with this email.', fr:'Un compte existe déjà avec cet e-mail.'},
+  'auth-err-weak':        {en:'Password too weak (6 characters minimum).', fr:'Mot de passe trop faible (6 caractères minimum).'},
+  'auth-err-email':       {en:'Invalid email address.',     fr:'Adresse e-mail invalide.'},
+  'auth-err-popup':       {en:'The sign-in window was blocked. Allow pop-ups for this site.', fr:'La fenêtre de connexion a été bloquée. Autorisez les pop-ups pour ce site.'},
+  'auth-err-many':        {en:'Too many attempts. Try again in a few minutes.', fr:'Trop de tentatives. Réessayez dans quelques minutes.'},
+  'auth-err-offline':     {en:'Sign-in is unavailable right now (offline?).', fr:'Connexion indisponible pour le moment (hors ligne ?).'},
+  'auth-err-generic':     {en:'Something went wrong. Please try again.', fr:'Une erreur est survenue. Veuillez réessayer.'},
+  'sync-guest':           {en:'Guest · not saved online',   fr:'Invité · non enregistré en ligne'},
+  'sync-loading':         {en:'Loading your account…',      fr:'Chargement du compte…'},
+  'sync-saving':          {en:'Saving…',                    fr:'Enregistrement…'},
+  'sync-saved':           {en:'Saved to your account',      fr:'Enregistré dans votre compte'},
+  'sync-error':           {en:'Not saved yet · retrying',   fr:'Pas encore enregistré · nouvel essai'},
+  'sync-offline':         {en:'Offline',                    fr:'Hors ligne'},
+  'cloud-load-confirm':   {en:'Your account already contains saved work.\n\nOK: open your saved work (the current canvas and document are replaced).\nCancel: keep the current work and save it to your account.', fr:'Votre compte contient déjà un travail enregistré.\n\nOK : ouvrir le travail enregistré (le canevas et le document actuels sont remplacés).\nAnnuler : garder le travail actuel et l\'enregistrer dans votre compte.'},
+  'font-rights-confirm':  {en:'Save this font to your account?\n\nBy continuing, you confirm that you have the right to use this font. It stays private: only you can access it.', fr:'Enregistrer cette fonte dans votre compte ?\n\nEn continuant, vous confirmez avoir le droit d\'utiliser cette fonte. Elle reste privée : vous seul y avez accès.'},
+  'font-dup':             {en:'Font already imported',      fr:'Fonte déjà importée'},
+  'font-saved-online':    {en:'Font saved to your account:', fr:'Fonte enregistrée dans votre compte :'},
+  'font-local-only':      {en:'Font kept on this device only (not saved to your account)', fr:'Fonte gardée sur cet appareil uniquement (non enregistrée dans votre compte)'},
+  'font-too-big':         {en:'Font too large to save online (max 4 MB) · kept on this device only', fr:'Fonte trop lourde pour l\'enregistrement en ligne (max 4 Mo) · gardée sur cet appareil'},
+  'font-upload-error':    {en:'Could not save the font online · kept on this device only', fr:'Impossible d\'enregistrer la fonte en ligne · gardée sur cet appareil'},
+  'font-restore-error':   {en:'A saved font could not be loaded:', fr:'Une fonte enregistrée n\'a pas pu être chargée :'},
 };
 
 // ── ID list for simple textContent swap ──────────────────────────────────────
@@ -4669,6 +4730,9 @@ function _applyLang(){
   // Keyboard search placeholder
   const kbSearch=g('kb-search');
   if(kbSearch)kbSearch.placeholder=t('kb-search-ph');
+
+  // Account button, sign-in dialog, sync status
+  _cloudUIUpdate();
 
   // Rebuild keyboard (translates category names + level labels)
   if(g('kb-root')&&g('kb-root').children.length)buildKb();
@@ -5134,3 +5198,248 @@ function toast(msg){
 }
 
 
+/* === cloud.js === */
+
+'use strict';
+// ═══════════════════════════════════════════════════════════════════════════
+// ACCOUNT — sign-in + per-user cloud save
+//   • Firebase Auth      → sign in / sign out (Google or email + password)
+//   • Cloud Firestore    → users/<uid>/data/workspace  (canvas, layers, document, page settings)
+//                          users/<uid>/data/library    (equations, profiles, font list)
+//   • /api/fonts         → font FILES, stored privately per user (Vercel Private Blob)
+// Guests keep working exactly as before (localStorage only). Nothing is uploaded
+// until the user signs in. Saving is automatic: every 4 s, only if something changed.
+// ═══════════════════════════════════════════════════════════════════════════
+const _FB_VER='12.18.0';
+const _FB_CFG={
+  apiKey:'AIzaSyC8aeWYsNQZPiGSEZ6Xxzjq8bNXeXqwhU4',
+  authDomain:'limou-5794e.firebaseapp.com',
+  projectId:'limou-5794e',
+  storageBucket:'limou-5794e.firebasestorage.app',
+  messagingSenderId:'279942095225',
+  appId:'1:279942095225:web:aed670c6b75f68ff228fa8',
+};
+const _FONT_MAX=4*1024*1024; // server limit for one font file
+// Document-mode page settings live in inputs: saved/restored by id
+const _DOC_FIELDS=['doc-title','preset','pw','ph2','orient','linked','mt','ml','mr','mb','bsz','lh','indent-mm','indent-mode','dfont',
+  'pn-on','pn-pos','pn-sty','pn-pre','pn-st','crop-on','cross-on','bleed'];
+const _AUTH_ERR={
+  'auth/invalid-credential':'invalid','auth/invalid-login-credentials':'invalid','auth/wrong-password':'invalid','auth/user-not-found':'invalid',
+  'auth/email-already-in-use':'exists','auth/weak-password':'weak','auth/invalid-email':'email','auth/missing-email':'email',
+  'auth/popup-blocked':'popup','auth/too-many-requests':'many','auth/network-request-failed':'offline',
+};
+const _cloud={fbP:null,fb:null,user:null,ready:false,busy:false,mode:'in',status:'guest',lastWs:'',lastLib:''};
+
+// ── Firebase SDK — loaded once from the CDN (no build step) ──────────────────
+function _fbLoad(){
+  if(!_cloud.fbP){
+    const base=`https://www.gstatic.com/firebasejs/${_FB_VER}/`;
+    _cloud.fbP=Promise.all(['firebase-app','firebase-auth','firebase-firestore-lite'].map(m=>import(base+m+'.js')))
+      .then(([app,A,F])=>{const a=app.initializeApp(_FB_CFG);return(_cloud.fb={auth:A.getAuth(a),db:F.getFirestore(a),A,F});})
+      .catch(e=>{_cloud.fbP=null;throw e;});
+  }
+  return _cloud.fbP;
+}
+
+// ── What gets saved ──────────────────────────────────────────────────────────
+function _wsData(){
+  const docSettings={};
+  _DOC_FIELDS.forEach(id=>{const el=g(id);if(el)docSettings[id]=el.type==='checkbox'?el.checked:el.value;});
+  return{v:1,feEls,layers,activeLayerId,docBlocks,docSettings,customAxes,gridSz,idC};
+}
+function _libData(){
+  return{v:1,equations:_equations,profiles,
+    fonts:loadedFonts.filter(f=>f._cloud).map(f=>({hash:f.hash,name:f.name,label:f.label,fvs:f.fvs||'',style:f._activeStyle||null}))};
+}
+
+// ── Restore ──────────────────────────────────────────────────────────────────
+// Points bIntegral / glyph checks at the active layer's font (same as "Apply to layer")
+function _activeOTF(){
+  const f=loadedFonts.find(x=>x.css===activeLayer().font);
+  if(f?._otf)window._limouOTFont=f._otf;
+  _clearDelimCaches();
+}
+function _wsApply(w){
+  if(Array.isArray(w.layers)&&w.layers.length){
+    layers=w.layers;
+    activeLayerId=layers.some(l=>l.id===w.activeLayerId)?w.activeLayerId:layers[0].id;
+  }
+  document.querySelectorAll('.fe-el').forEach(e=>e.remove());
+  feEls=Array.isArray(w.feEls)?w.feEls:[];
+  feSelId=null;feSelIds.clear();feLayerHighlight=null;
+  docBlocks=Array.isArray(w.docBlocks)?w.docBlocks:[];docSelId=null;
+  customAxes=Array.isArray(w.customAxes)?w.customAxes:[];
+  idC=Math.max(idC,+w.idC||0); // new ids never collide with restored ones
+  Object.entries(w.docSettings||{}).forEach(([id,v])=>{const el=g(id);if(el){if(el.type==='checkbox')el.checked=!!v;else el.value=v;}});
+  if(w.gridSz){const gs=g('gc-sz');if(gs)gs.value=w.gridSz;setGridSz(+w.gridSz);}
+  // Rebuild the ⇄ Doc map from ids stored on the blocks → incremental sync keeps working across sessions
+  _syncMap=new Map();
+  docBlocks.forEach(b=>{(b._feIds||[]).forEach(id=>_syncMap.set(id,b.id));if(b._feId)_syncMap.set(b._feId,b.id);});
+  _activeOTF();
+  feEls.forEach(feRenderEl);renderCustomAxes();feSyncZOrder();
+  g('fe-hint').style.opacity=feEls.length?'0':'1';
+  feInsClear();renderLayers();buildKb();
+  feHistory=[];feHistIdx=-1;docHistory=[];docHistIdx=-1;feSnap();docSnap();
+  applyPreset(gvs('preset')); // custom size row + page render + CSS + status bar
+  renderDocList();updDocBlInsp();
+  if(appMode==='fe'){const si=g('st-info');if(si)si.textContent=feEls.length+' element(s)';}
+}
+// Equations and profiles are merged (account version wins for the same item)
+function _libApply(lib){
+  const idx=new Map(_equations.map((e,i)=>[e.id,i]));
+  (lib.equations||[]).forEach(e=>{if(idx.has(e.id))_equations[idx.get(e.id)]=e;else _equations.push(e);});
+  Object.assign(profiles,lib.profiles||{});
+  _saveEq();renderEquations();renderProfiles();
+  if(appMode==='doc')_renderDocEqList();
+}
+async function _fontsRestore(list){
+  const missing=(list||[]).filter(m=>{
+    const f=loadedFonts.find(x=>x.hash===m.hash);
+    if(f){f._cloud=true;delete f._bytes;}
+    return !f;
+  });
+  if(!missing.length)return;
+  const files=await Promise.all(missing.map(m=>_fontApi('GET',m.hash).then(r=>r.ok?r.arrayBuffer():null).catch(()=>null)));
+  for(let i=0;i<missing.length;i++){
+    const m=missing[i];
+    const fd=files[i]&&await processFont(new File([files[i]],m.label||'font'),{name:m.name,label:m.label,silent:true,cloud:true});
+    if(!fd){toast(t('font-restore-error')+' '+(m.label||''));continue;}
+    if(m.fvs){_syncAxesFromFVS(fd.axes,m.fvs);fd.fvs=m.fvs;}
+    if(m.style)fd._activeStyle=m.style;
+  }
+  _activeOTF();renderFontList();renderEquations();
+}
+
+// ── Fonts: private upload through /api/fonts ─────────────────────────────────
+function _fontApi(method,hash,body){
+  return _cloud.user.getIdToken().then(tok=>fetch('/api/fonts'+(hash?'?hash='+hash:''),{method,body,headers:{Authorization:'Bearer '+tok}}));
+}
+// Called by processFont for every newly imported font
+function _cloudFontAdded(fd,ab){fd._bytes=ab;if(_cloud.ready)_fontUpload(fd);}
+async function _fontUpload(fd){
+  if(!_cloud.user||fd._cloud||!fd._bytes)return;
+  if(fd._bytes.byteLength>_FONT_MAX){toast(t('font-too-big'));return;}
+  // The user confirms, for each font, that they have the right to use it
+  if(!confirm(t('font-rights-confirm'))){toast(t('font-local-only'));return;}
+  try{
+    const r=await _fontApi('POST','',fd._bytes);
+    if(!r.ok)throw new Error('HTTP '+r.status);
+    fd._cloud=true;delete fd._bytes;
+    toast(t('font-saved-online')+' '+fd.label);
+  }catch(e){console.warn('[Limou] font upload failed',e);toast(t('font-upload-error'));}
+}
+
+// ── Autosave (only what changed, only when signed in and loaded) ─────────────
+async function _cloudSave(){
+  if(!_cloud.ready||_cloud.busy)return;
+  const ws=JSON.stringify(_wsData()),lib=JSON.stringify(_libData());
+  if(ws===_cloud.lastWs&&lib===_cloud.lastLib)return;
+  _cloud.busy=true;_cloudStatus('saving');
+  try{
+    const {db,F}=_cloud.fb,uid=_cloud.user.uid,at=Date.now();
+    const put=(k,json)=>F.setDoc(F.doc(db,'users',uid,'data',k),{json,at});
+    await Promise.all([ws!==_cloud.lastWs&&put('workspace',ws),lib!==_cloud.lastLib&&put('library',lib)].filter(Boolean));
+    _cloud.lastWs=ws;_cloud.lastLib=lib;_cloudStatus('saved');
+  }catch(e){console.warn('[Limou] cloud save failed',e);_cloudStatus(navigator.onLine?'error':'offline');}
+  finally{_cloud.busy=false;}
+}
+function _cloudDirty(){
+  return _cloud.ready&&(_cloud.busy||JSON.stringify(_wsData())!==_cloud.lastWs||JSON.stringify(_libData())!==_cloud.lastLib);
+}
+
+// ── Session ──────────────────────────────────────────────────────────────────
+async function _cloudSignedIn(u){
+  if(_cloud.user?.uid===u.uid)return;
+  _cloud.user=u;_cloud.ready=false;_cloudStatus('loading');_cloudUIUpdate();authClose();
+  try{
+    const {db,F}=_cloud.fb;
+    const [wsS,libS]=await Promise.all(['workspace','library'].map(k=>F.getDoc(F.doc(db,'users',u.uid,'data',k))));
+    const wsJ=wsS.exists()?wsS.data().json:'',libJ=libS.exists()?libS.data().json:'';
+    const ws=wsJ?JSON.parse(wsJ):null,lib=libJ?JSON.parse(libJ):null;
+    if(lib)_libApply(lib);
+    await _fontsRestore(lib?.fonts);
+    // Saved work vs. work on screen: ask only when both exist
+    const has=w=>!!(w&&((w.feEls||[]).length||(w.docBlocks||[]).length));
+    const useCloud=has(ws)&&(!has(_wsData())||confirm(t('cloud-load-confirm')));
+    if(useCloud)_wsApply(ws);
+    _cloud.lastWs=useCloud?JSON.stringify(_wsData()):'';
+    _cloud.lastLib=libJ;
+    _cloud.ready=true;
+    for(const fd of loadedFonts)if(!fd._cloud&&fd._bytes)await _fontUpload(fd); // fonts imported before signing in
+    toast(t('auth-welcome')+' · '+(u.email||u.displayName||''));
+    _cloudSave();
+  }catch(e){
+    // Nothing is saved while the account could not be read → never overwrites saved work
+    console.warn('[Limou] account load failed',e);_cloudStatus('error');toast(t('auth-err-generic'));
+  }
+}
+function _cloudSignedOut(){_cloud.user=null;_cloud.ready=false;_cloudStatus('guest');_cloudUIUpdate();}
+async function cloudSignOut(){
+  while(_cloud.busy)await new Promise(r=>setTimeout(r,100));
+  await _cloudSave();
+  try{await _cloud.fb.A.signOut(_cloud.fb.auth);}catch(_){}
+  try{localStorage.removeItem('limou-eq');}catch(_){} // nothing of this account stays on a shared computer
+  location.reload();
+}
+
+// ── Sign-in dialog ───────────────────────────────────────────────────────────
+function authOpen(){g('auth-m')?.classList.add('show');_authErr('');if(!_cloud.user)setTimeout(()=>g('auth-email')?.focus(),50);}
+function authClose(){g('auth-m')?.classList.remove('show');const p=g('auth-pass');if(p)p.value='';}
+function authToggleMode(){_cloud.mode=_cloud.mode==='up'?'in':'up';_authErr('');_cloudUIUpdate();}
+function _authErr(msg){const el=g('auth-err');if(el)el.textContent=msg||'';}
+async function _authRun(fn){
+  _authErr('');
+  const box=g('auth-box');box?.classList.add('busy');
+  try{await fn(await _fbLoad());}
+  catch(e){
+    if(e?.code==='auth/popup-closed-by-user'||e?.code==='auth/cancelled-popup-request')return;
+    console.warn('[Limou] auth',e?.code||e);
+    _authErr(t('auth-err-'+(_AUTH_ERR[e?.code]||(e?.code?'generic':'offline'))));
+  }finally{box?.classList.remove('busy');}
+}
+function authGoogle(){_authRun(({auth,A})=>A.signInWithPopup(auth,new A.GoogleAuthProvider()));}
+function authEmail(ev){
+  ev.preventDefault();
+  const em=gvs('auth-email').trim(),pw=gvs('auth-pass');
+  _authRun(({auth,A})=>(_cloud.mode==='up'?A.createUserWithEmailAndPassword:A.signInWithEmailAndPassword)(auth,em,pw));
+}
+function authForgot(){
+  const em=gvs('auth-email').trim();
+  if(!em){_authErr(t('auth-need-email'));g('auth-email')?.focus();return;}
+  _authRun(async({auth,A})=>{auth.languageCode=_lang;await A.sendPasswordResetEmail(auth,em);toast(t('auth-reset-sent'));});
+}
+function _cloudStatus(s){
+  _cloud.status=s;
+  const txt=t('sync-'+s);
+  ['st-sync','auth-sync'].forEach(id=>{const el=g(id);if(el)el.textContent=txt;});
+}
+// Labels that depend on state or language (called by _applyLang too)
+function _cloudUIUpdate(){
+  const u=_cloud.user,up=_cloud.mode==='up';
+  const btn=g('btn-account');
+  if(btn){
+    btn.textContent=u?((u.displayName||u.email||'').split(/[\s@]/)[0].slice(0,16)||t('auth-account')):t('auth-signin-btn');
+    btn.classList.toggle('on',!!u);btn.title=u?.email||'';
+  }
+  g('auth-out')?.classList.toggle('hidden-pb',!!u);
+  g('auth-in')?.classList.toggle('hidden-pb',!u);
+  const who=g('auth-who');if(who)who.textContent=u?(u.email||u.displayName||''):'';
+  const set=(id,k)=>{const el=g(id);if(el)el.textContent=t(k);};
+  set('auth-title',up?'auth-title-up':'auth-title');
+  set('auth-submit',up?'auth-submit-up':'auth-submit-in');
+  set('auth-toggle',up?'auth-to-in':'auth-to-up');
+  const fg=g('auth-forgot');if(fg)fg.style.display=up?'none':'';
+  const pw=g('auth-pass');if(pw)pw.autocomplete=up?'new-password':'current-password';
+  _cloudStatus(_cloud.status);
+}
+
+document.addEventListener('DOMContentLoaded',()=>{
+  _cloudUIUpdate();
+  document.addEventListener('keydown',ev=>{if(ev.key==='Escape'&&g('auth-m')?.classList.contains('show'))authClose();});
+  setInterval(_cloudSave,4000);
+  document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden')_cloudSave();});
+  window.addEventListener('beforeunload',ev=>{if(_cloudDirty()){_cloudSave();ev.preventDefault();ev.returnValue='';}});
+  _fbLoad()
+    .then(({auth,A})=>A.onAuthStateChanged(auth,u=>u?_cloudSignedIn(u):_cloudSignedOut()))
+    .catch(e=>{console.warn('[Limou] account service unavailable',e);_cloudStatus('offline');});
+});
