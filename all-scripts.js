@@ -25,9 +25,9 @@ const BLOCK_CLR  = {text:'#aaa',title:'#378ADD',h2:'#378ADD',formula:'#1D9E75','
 const GUEST_ACCESS = {
   export:    false, // Export HTML, export SVG, export profiles (JSON)
   fonts:     false, // Import custom fonts
-  print:     false,  // Paged.js preview & print
+  print:     true,  // Paged.js preview & print
   equations: true,  // Save equations
-  profiles:  false,  // Save profiles
+  profiles:  true,  // Save profiles
   document:  true,  // ¶ Document mode and the ⇄ Doc button
 };
 
@@ -5243,7 +5243,9 @@ function toast(msg){
 const _FB_VER='12.18.0';
 const _FB_CFG={
   apiKey:'AIzaSyC8aeWYsNQZPiGSEZ6Xxzjq8bNXeXqwhU4',
-  authDomain:'limou-5794e.firebaseapp.com',
+  // Sign-in pages are served from Limou's own domain (vercel.json forwards /__/auth/ to Firebase),
+  // so Google shows your domain. Vercel preview links and local tests keep the Firebase domain.
+  authDomain:/(\.vercel\.app|localhost|127\.0\.0\.1)$/.test(location.hostname)?'limou-5794e.firebaseapp.com':location.host,
   projectId:'limou-5794e',
   storageBucket:'limou-5794e.firebasestorage.app',
   messagingSenderId:'279942095225',
