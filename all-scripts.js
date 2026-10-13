@@ -2322,8 +2322,6 @@ function feInsUpdate(){
   }
   if(n.type==='op'){
     _setR('mp-dom',n.dispOpH||55,55,'mp-dom-l',v=>v+'px');
-    _setR('mp-ulg',n.upperGap||.05,.05,'mp-ulg-l',v=>v.toFixed(2)+'em');
-    _setR('mp-llg',n.lowerGap||.05,.05,'mp-llg-l',v=>v.toFixed(2)+'em');
   }
 
   // Active params
@@ -2489,17 +2487,18 @@ function uElNode(prop,v){
     stretch:'ins-sx-lbl',axis:'ins-ax-lbl',ic:'ins-ic-lbl',
     frt:'mp-frt-l',fnumerUp:'mp-fnu-l',fdenomDown:'mp-fdd-l',fnumGap:'mp-fng-l',fdenGap:'mp-fdg-l',
     rrt:'mp-rrt-l',rvg:'mp-rvg-l',rxa:'mp-rxa-l',
-    minOv:'mp-mco-l',dispOpH:'mp-dom-l',upperGap:'mp-ulg-l',lowerGap:'mp-llg-l',
+    minOv:'mp-mco-l',dispOpH:'mp-dom-l',
   };
   const fmtMap={
     stretch:x=>x+'%',axis:x=>x+'px',ic:x=>x+'px',
     frt:x=>x.toFixed(3)+'em',fnumerUp:x=>x.toFixed(2)+'em',fdenomDown:x=>x.toFixed(2)+'em',
     fnumGap:x=>x.toFixed(3)+'em',fdenGap:x=>x.toFixed(3)+'em',
     rrt:x=>x.toFixed(3)+'em',rvg:x=>x.toFixed(2)+'em',rxa:x=>x.toFixed(2)+'em',
-    minOv:x=>x+'px',dispOpH:x=>x+'px',upperGap:x=>x.toFixed(2)+'em',lowerGap:x=>x.toFixed(2)+'em',
+    minOv:x=>x+'px',dispOpH:x=>x+'px',
   };
   if(labelMap[prop]){const el=g(labelMap[prop]);if(el&&fmtMap[prop])el.textContent=fmtMap[prop](v);}
   feRenderEl(rd);
+  _semFit(_semTop(rd).top); // attached elements follow at once (stretch, axis, MATH params)
 }
 
 
@@ -3913,13 +3912,17 @@ function _semZones(rd,exclude){
       :rel==='sub'?{x1:R,y1:r.y1+h*.65,x2:r.x2+s,y2:r.y2+h*.5}
       :rel==='over'?{x1:r.x1-w*.25,y1:r.y1-h*.9,x2:R,y2:r.y1+h*.15}
       :{x1:r.x1-w*.25,y1:r.y2-h*.15,x2:R,y2:r.y2+h*.9};
-    // Grow sideways over what the slot already holds, so 2n or i=1 can be extended
-    let kids=0;
+    // Grow sideways over what the slot already holds, so 2n or i=1 can be extended.
+    // ax,ay = where the next item will go — the dot shown to the user.
+    let kids=0,ax=rel==='sup'||rel==='sub'?r.x2+4:(r.x1+r.x2)/2,
+        ay=rel==='sup'?r.y1+h*.2:rel==='sub'?r.y1+h*.85:rel==='over'?r.y1-6:r.y2+6;
     _semKids(rd.id,rel).forEach(k=>{
       if(exclude?.has(k.id))return;const kr=_semRect(k);if(!kr)return;kids++;
       z.x1=Math.min(z.x1,kr.x1);z.x2=Math.max(z.x2,kr.x2+Math.max(kr.y2-kr.y1,12)*.9);
+      if(rel==='sup'||rel==='sub')ax=Math.max(ax,kr.x2+4);
+      else{ax=Math.max(ax,kr.x2+4);ay=rel==='over'?Math.min(ay,kr.y1-6):Math.max(ay,kr.y2+6);}
     });
-    return{...z,rel,rd,kids};
+    return{...z,rel,rd,kids,ax,ay};
   });
 }
 
@@ -3949,12 +3952,13 @@ function _semDraw(rd,exclude){
   if(st)st.textContent=_semHit?`${t('sem-release')} ${t('sem-'+_semHit.rel)} ${t('sem-of')} ${_semLabel(_semHit.rd)}`:'';
   if(!rd){box?.remove();return;}
   if(!box){box=document.createElement('div');box.id='sem-zones';g('fe-canvas').appendChild(box);}
+  // One small dot per free slot of that base, where the item would land; the slot under
+  // the item lights up. The detection zones themselves stay invisible.
   box.innerHTML='';
   _semZones(rd,exclude).forEach(z=>{
-    const on=_semHit?.rd===rd&&_semHit.rel===z.rel;
-    const d=document.createElement('div');d.className='sem-zone'+(on?' on':'');
-    d.style.cssText=`left:${z.x1}px;top:${z.y1}px;width:${z.x2-z.x1}px;height:${z.y2-z.y1}px`;
-    d.textContent=t('sem-'+z.rel);
+    const d=document.createElement('div');
+    d.className='sem-dot'+(_semHit?.rd===rd&&_semHit.rel===z.rel?' on':'');
+    d.style.cssText=`left:${z.ax}px;top:${z.ay}px`;d.title=t('sem-'+z.rel);
     box.appendChild(d);
   });
 }
@@ -4001,16 +4005,23 @@ function _semFit(base,seen=new Set()){
     kids.forEach(k=>_semFit(k,seen));
   });
 }
+// Spacing of a base's scripts, in em of the base size (stored on its node, so profiles keep it):
+// scrGap = gap between base and exponent/index · supUp / subDn = raise / lower them ·
+// upperGap / lowerGap = UpperLimitGapMin / LowerLimitGapMin (limits)
+const _SEM_GAPS={scrGap:.05,supUp:0,subDn:0,upperGap:.05,lowerGap:.05};
+const _semGap=(base,k)=>(base.node[k]??_SEM_GAPS[k])*base.size;
+
 // Line up one slot next to / above / below its base, plus each element's own fine-tuning
 function _semLayout(base,rel){
   const r=_semRect(base);if(!r)return;
   const h=r.y2-r.y1,kids=_semKids(base.id,rel),rects=kids.map(_semRect);
   const W=rects.reduce((s,k)=>s+(k?k.x2-k.x1:0),0);
-  let x=rel==='sup'||rel==='sub'?r.x2:(r.x1+r.x2-W)/2;
+  let x=rel==='sup'||rel==='sub'?r.x2+_semGap(base,'scrGap'):(r.x1+r.x2-W)/2;
   kids.forEach((k,i)=>{
     const kr=rects[i];if(!kr)return;
     const kh=kr.y2-kr.y1;
-    const top=rel==='over'?r.y1-kh:rel==='under'?r.y2:(rel==='sup'?r.y1+h*.25:r.y1+h*.8)-kh/2;
+    const top=rel==='over'?r.y1-kh-_semGap(base,'upperGap'):rel==='under'?r.y2+_semGap(base,'lowerGap')
+      :rel==='sup'?r.y1+h*.25-kh/2-_semGap(base,'supUp'):r.y1+h*.8-kh/2+_semGap(base,'subDn');
     _semShift(k,Math.round(x-kr.x1+(k.att.dx||0)),Math.round(top-kr.y1+(k.att.dy||0)));
     x+=kr.x2-kr.x1;
   });
@@ -4061,7 +4072,26 @@ function _semLines(els){
 }
 
 // ── Inspector ──
+// MATH tab › Scripts edits the spacing of a base; with a script selected, it edits its base
+const _SEM_GAP_IDS={scrGap:'mp-sg',supUp:'mp-su',subDn:'mp-sd',upperGap:'mp-ulg',lowerGap:'mp-llg'};
+function _semGapTarget(rd){
+  if(!rd||rd.type==='textbox')return null;
+  return _semKids(rd.id).length||_semIsBig(rd)?rd:_semRoot(rd)?null:_semEl(rd.att.to);
+}
+function _semGapLbl(k,v){const l=g(_SEM_GAP_IDS[k]+'-l');if(l)l.textContent=v.toFixed(2)+'em';}
+function uScr(k,v){
+  const b=_semGapTarget(_semEl(feSelId));if(!b||!canEdit(b.layerId))return;
+  b.node[k]=v;_semGapLbl(k,v);_semFit(_semTop(b).top);
+  clearTimeout(uScr._t);uScr._t=setTimeout(()=>feSnap(),400);
+}
 function _semInsUpdate(rd){
+  const b=_semGapTarget(rd),ss=g('math-scr-sec');
+  if(ss)ss.style.display=b?'block':'none';
+  if(b){
+    g('math-scr-of').textContent=b===rd?'':_semLabel(b);
+    Object.keys(_SEM_GAP_IDS).forEach(k=>{const v=b.node[k]??_SEM_GAPS[k],s=g(_SEM_GAP_IDS[k]);if(s)s.value=v;_semGapLbl(k,v);});
+    g('math-lim-rows').style.display=_semIsBig(b)?'':'none';
+  }
   const att=!_semRoot(rd)&&rd.att,sec=g('ins-rel-sec'),note=g('ins-sz-note');
   if(sec)sec.style.display=att?'':'none';
   if(note)note.style.display=att?'':'none';
@@ -4850,6 +4880,10 @@ const _I18N = {
   'sem-manual':           {en:'manual',            fr:'manuel'},
   'sem-manual-hint':      {en:'set by hand, no longer follows the base', fr:'réglée à la main, ne suit plus la base'},
   'sem-auto-reset':       {en:'Back to auto',      fr:'Revenir en auto'},
+  'ph-scripts':           {en:'Scripts',           fr:'Exposants & indices'},
+  'lbl-scrgap':           {en:'ScriptGap',         fr:'Écart (ScriptGap)'},
+  'lbl-supshift':         {en:'SuperscriptShift',  fr:'Hauteur exposant'},
+  'lbl-subshift':         {en:'SubscriptShift',    fr:'Profondeur indice'},
 };
 
 // ── ID list for simple textContent swap ──────────────────────────────────────

@@ -403,13 +403,13 @@ canvas.ruler { background: #f0f0f0; cursor: crosshair; user-select: none; displa
   box-sizing: border-box;
 }
 
-/* Semantic snapping — zones shown while dragging near an element */
+/* Semantic snapping — one dot per free slot of the base being approached; the slot under
+   the dragged item lights up green */
 #sem-zones { position: absolute; inset: 0; pointer-events: none; z-index: 9997; }
-.sem-zone { position: absolute; box-sizing: border-box; border: 1px dashed var(--accent); border-radius: 4px;
-  background: color-mix(in srgb, var(--accent) 7%, transparent); font-size: 9px; color: var(--text2);
-  display: flex; justify-content: center; padding-top: 1px; white-space: nowrap; }
-.sem-zone.on { border: 2px solid var(--accent); background: color-mix(in srgb, var(--accent) 22%, transparent);
-  color: #111; font-weight: 600; }
+.sem-dot { position: absolute; width: 7px; height: 7px; margin: -3.5px 0 0 -3.5px; border-radius: 50%;
+  background: #fff; border: 1.5px solid #9a9a9a; box-sizing: border-box; transition: transform .08s; }
+.sem-dot.on { background: #2EAD4B; border-color: #1d7a32; transform: scale(1.6);
+  box-shadow: 0 0 0 3px rgba(46,173,75,.22); }
 .st-snap { font-weight: 600; }
 /* Inspector: relation chip + automatic size note */
 .sem-chip { padding: 1px 7px; border-radius: 9px; background: var(--accent-soft); color: #111; font-size: 10px; font-weight: 600; }

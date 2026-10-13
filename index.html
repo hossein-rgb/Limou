@@ -406,13 +406,31 @@
                 <input class="pi" type="range" id="mp-dom" min="20" max="120" step="2" value="55" oninput="uElNode('dispOpH',+this.value)" style="flex:1">
                 <span class="mono-val" id="mp-dom-l">55px</span>
               </div>
-              <div class="pr"><label data-i18n="lbl-upperlimitgap">UpperLimitGapMin</label>
-                <input class="pi" type="range" id="mp-ulg" min="0" max="0.3" step="0.01" value="0.05" oninput="uElNode('upperGap',+this.value)" style="flex:1">
-                <span class="mono-val" id="mp-ulg-l">0.05em</span>
+            </div>
+            <!-- Scripts: spacing of exponents, indices and limits (base, or base of the selected script) -->
+            <div class="psec" id="math-scr-sec" style="display:none">
+              <div class="ph"><span data-i18n="ph-scripts">Scripts</span><span class="sem-base" id="math-scr-of"></span></div>
+              <div class="pr"><label data-i18n="lbl-scrgap">ScriptGap</label>
+                <input class="pi" type="range" id="mp-sg" min="-0.2" max="0.5" step="0.01" value="0.05" oninput="uScr('scrGap',+this.value)" style="flex:1">
+                <span class="mono-val" id="mp-sg-l">0.05em</span>
               </div>
-              <div class="pr"><label data-i18n="lbl-lowerlimitgap">LowerLimitGapMin</label>
-                <input class="pi" type="range" id="mp-llg" min="0" max="0.3" step="0.01" value="0.05" oninput="uElNode('lowerGap',+this.value)" style="flex:1">
-                <span class="mono-val" id="mp-llg-l">0.05em</span>
+              <div class="pr"><label data-i18n="lbl-supshift">SuperscriptShift</label>
+                <input class="pi" type="range" id="mp-su" min="-0.3" max="0.6" step="0.01" value="0" oninput="uScr('supUp',+this.value)" style="flex:1">
+                <span class="mono-val" id="mp-su-l">0.00em</span>
+              </div>
+              <div class="pr"><label data-i18n="lbl-subshift">SubscriptShift</label>
+                <input class="pi" type="range" id="mp-sd" min="-0.3" max="0.6" step="0.01" value="0" oninput="uScr('subDn',+this.value)" style="flex:1">
+                <span class="mono-val" id="mp-sd-l">0.00em</span>
+              </div>
+              <div id="math-lim-rows">
+                <div class="pr"><label data-i18n="lbl-upperlimitgap">UpperLimitGapMin</label>
+                  <input class="pi" type="range" id="mp-ulg" min="0" max="0.3" step="0.01" value="0.05" oninput="uScr('upperGap',+this.value)" style="flex:1">
+                  <span class="mono-val" id="mp-ulg-l">0.05em</span>
+                </div>
+                <div class="pr"><label data-i18n="lbl-lowerlimitgap">LowerLimitGapMin</label>
+                  <input class="pi" type="range" id="mp-llg" min="0" max="0.3" step="0.01" value="0.05" oninput="uScr('lowerGap',+this.value)" style="flex:1">
+                  <span class="mono-val" id="mp-llg-l">0.05em</span>
+                </div>
               </div>
             </div>
             <div class="psec">
