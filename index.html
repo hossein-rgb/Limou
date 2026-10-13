@@ -173,7 +173,8 @@
       <div class="fe-inner">
         <canvas id="v-ruler" class="ruler v-ruler" onmousedown="startGuide('v',event)"></canvas>
         <div id="fe-canvas" tabindex="0"
-          ondragover="event.preventDefault()"
+          ondragover="event.preventDefault();_semKeyOver(event)"
+          ondragleave="_semKeyLeave(event)"
           ondrop="onFEDrop(event)"
           onclick="onFEClick(event)"
           onmousedown="onFECanvasMouseDown(event)"
@@ -272,10 +273,10 @@
               <div class="ph" data-i18n-ph="ph-position">Position</div>
               <div class="pr">
                 <label>X</label>
-                <input class="pi" type="number" id="ins-px" min="0" max="2000" step="1" value="0" oninput="uElPosX(+this.value)" style="width:60px">
+                <input class="pi" type="number" id="ins-px" min="0" max="2000" step="1" value="0" oninput="uElPos('x',+this.value)" style="width:60px">
                 <span class="pu">px</span>
                 <label style="margin-left:8px">Y</label>
-                <input class="pi" type="number" id="ins-py" min="0" max="2000" step="1" value="0" oninput="uElPosY(+this.value)" style="width:60px">
+                <input class="pi" type="number" id="ins-py" min="0" max="2000" step="1" value="0" oninput="uElPos('y',+this.value)" style="width:60px">
                 <span class="pu">px</span>
               </div>
             </div>
@@ -287,10 +288,21 @@
                 <span class="pu">px</span>
                 <input class="pi" type="range" id="ins-sz" min="14" max="120" step="2" value="48" oninput="uElSz(+this.value)" style="flex:1;margin-left:8px">
               </div>
+              <div class="pr sem-sz-note" id="ins-sz-note" style="display:none"></div>
               <div class="pr"><label data-i18n="lbl-opacity">Opacity</label>
                 <input class="pi" type="range" id="ins-op" min="10" max="100" step="5" value="100" oninput="uElOp(+this.value)" style="flex:1">
                 <span class="mono-val" id="ins-op-lbl">100%</span>
               </div>
+            </div>
+            <!-- Semantic relation (visible only for an element attached by snapping) -->
+            <div class="psec" id="ins-rel-sec" style="display:none">
+              <div class="ph" data-i18n-ph="ph-relation">Semantic relation</div>
+              <div class="pr">
+                <span class="sem-chip" id="ins-rel-chip"></span>
+                <span class="sem-of" data-i18n="sem-of">of</span>
+                <span class="sem-base" id="ins-rel-base"></span>
+              </div>
+              <button class="ins-btn red" onclick="semDetach()" data-i18n="sem-detach">Detach</button>
             </div>
             <!-- Free symbol controls -->
             <div class="psec" id="ins-free-sec" style="display:none">
@@ -559,6 +571,7 @@
     <span class="st" id="st-hist">—</span>
     <div class="stsep"></div>
     <span class="st" id="st-sync"></span>
+    <span class="st st-snap" id="st-snap"></span>
     <div id="zoom-c">
       <button class="zbtn" onclick="setZoom(zoom-.1)">−</button>
       <span class="zlbl" id="zlbl" onclick="setZoom(1)">100%</span>

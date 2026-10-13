@@ -1,5 +1,5 @@
 /* =============================================
-   Merged JS — 21 file(s)
+   Merged JS — 22 module(s) (semantic.js added Oct 2026)
    Generated: 5/28/2026, 11:22:54 AM
    ============================================= */
 
@@ -639,7 +639,7 @@ function _saveEq(){try{localStorage.setItem('limou-eq',JSON.stringify(_equations
 function saveEquation(){
   if(!_guestOK('equations'))return;
   const toSave = feSelIds.size
-    ? feEls.filter(e => feSelIds.has(e.id))
+    ? _feDragSet(feEls.filter(e => feSelIds.has(e.id))).map(s => s.rd) // + attached elements
     : feEls;
   if(!toSave.length){toast(t('canvas-empty'));return;}
 
@@ -830,8 +830,9 @@ function _insertEqAt(eq, originX, originY){
   feSnap();
 
   const newIds = [];
+  const ids = new Map(eq.elements.filter(s => s.id).map(s => [s.id, uid()])); // keeps exponent/index links
   eq.elements.forEach(src => {
-    const id = uid();
+    const id = ids.get(src.id) || uid();
     let rd;
 
     if(src.type === 'textbox'){
@@ -869,6 +870,8 @@ function _insertEqAt(eq, originX, originY){
         layerId: activeLayerId,
         node: JSON.parse(JSON.stringify(src.node)),
       };
+      ['att','_szOrig','_szManual'].forEach(k => { if(src[k] != null) rd[k] = JSON.parse(JSON.stringify(src[k])); });
+      _semRemap(rd, ids);
     }
 
     feEls.push(rd);
@@ -1104,10 +1107,10 @@ function onFEDrop(ev){
 // ── Core drop logic — shared by HTML5 drag and accent pointer drag ──
 function _dropKeyOnCanvas(key,x,y){
   const layer=activeLayer();
-  if(layer.locked){toast(t('locked-layer'));return false;}
+  if(layer.locked){_semClear();toast(t('locked-layer'));return false;}
   const id=uid();
   const rd={id,x,y,size:layer.fontSize||defaultFontSize,opacity:100,margin:5,layerId:activeLayerId,node:mkNode(key)};
-  feEls.push(rd);feRenderEl(rd);feSelect(id);
+  feEls.push(rd);feRenderEl(rd);_semDrop(rd);feSelect(id);
   g('fe-hint').style.opacity='0';
   feSnap();
   return true;
@@ -1136,6 +1139,7 @@ function feRenderEl(rd){
   if(layer.fvs)mei.style.fontVariationSettings=layer.fvs;
   mei.appendChild(bNode(rd.node,rd.size,layer.font||MFONT,layer.fvs||''));
   wrap.append(lockBadge,dx,mei);
+  _semRO?.observe(mei);
 
   // La sélection est gérée exclusivement dans mousedown pour éviter
   // que le event 'click' (déclenché après mouseup) ne lise un état
@@ -1176,7 +1180,7 @@ function feRenderEl(rd){
       if(!moved && feSelIds.size>1 && !(e.metaKey||e.ctrlKey)){
         feSelect(rd.id,false);
       }
-      if(dragging&&moved){if(semRd)_semDrop(semRd);feSnap();}
+      if(dragging&&moved){if(semRd)_semDrop(semRd);else _feNudge(dragSnapshot);feSnap();}
       _semClear();
       dragging=false;moved=false;
       wrap.classList.remove('being-moved');
@@ -1210,6 +1214,15 @@ function _feMoveSet(set,pos){
     _feElPos(s.rd);if(!s.lead)feInsUpdatePos(s.rd);
   });
   chkConflict();if(showBB)renderBBs();
+}
+// After a finished move: an attached lead moved without its base keeps the move as
+// fine-tuning on top of its automatic place (att.dx/dy)
+function _feNudge(set){
+  set.forEach(s=>{
+    const a=s.rd.att;
+    if(s.lead||_semRoot(s.rd)||set.some(o=>o.rd.id===a.to))return;
+    a.dx=(a.dx||0)+s.rd.x-s.x0;a.dy=(a.dy||0)+s.rd.y-s.y0;
+  });
 }
 
 // ── Sync z-order DOM → ordre des layers (layers[0] = fond, layers[last] = dessus) ──
@@ -1292,8 +1305,13 @@ function feHighlightLayer(layerId){
   if(showBB)renderBBs();
 }
 
-// ── Suppression ──
+// ── Suppression ── (an element goes with everything attached to it)
 function feDelById(id){
+  const rd=_semEl(id),top=rd&&!_semRoot(rd)?_semTop(rd).top:null;
+  [id,..._semDesc(id)].forEach(_feDelOne);
+  if(top&&_semEl(top.id))_semFit(top); // close the gap left in its slot
+}
+function _feDelOne(id){
   const el=document.getElementById(id);if(el)el.remove();
   feEls=feEls.filter(e=>e.id!==id);
   feSelIds.delete(id);
@@ -1314,12 +1332,16 @@ function feDup(){
   feSnap();
   const step=arrowStep(false);
   const newIds=[];
-  feEls.filter(e=>feSelIds.has(e.id)&&canEdit(e.layerId)).forEach(rd=>{
-    const id=uid();
+  // Selected elements + what is attached to them; links inside the copy are kept
+  const src=_feDragSet(feEls.filter(e=>feSelIds.has(e.id)&&canEdit(e.layerId)));
+  const ids=new Map(src.map(s=>[s.rd.id,uid()]));
+  src.forEach(({rd,lead})=>{
+    const id=ids.get(rd.id);
     const cl=JSON.parse(JSON.stringify(rd));cl.id=id;
     cl.x+=step;cl.y+=step;
+    _semRemap(cl,ids);
     feEls.push(cl);feRenderEl(cl);
-    newIds.push(id);
+    if(!lead)newIds.push(id);
   });
   if(!newIds.length)return;
   // Sélectionner les nouveaux éléments
@@ -1354,25 +1376,22 @@ function onFEKey(ev){
   if(ev.altKey){
     // Alt+arrows = font size seulement (primary uniquement)
     const rd=feEls.find(e=>e.id===feSelId);if(!rd||!canEdit(rd.layerId))return;
-    if(ev.key==='ArrowUp'){rd.size=Math.min(rd.size+2,120);feRenderEl(rd);feInsUpdate();}
-    else if(ev.key==='ArrowDown'){rd.size=Math.max(rd.size-2,12);feRenderEl(rd);feInsUpdate();}
+    if(ev.key==='ArrowUp'){_feSetSz([rd],Math.min(rd.size+2,120));feInsUpdate();}
+    else if(ev.key==='ArrowDown'){_feSetSz([rd],Math.max(rd.size-2,12));feInsUpdate();}
     else if(ev.key==='ArrowRight'&&rd.node.type==='free'&&_nodeCanStretchX(rd.node)){rd.node.stretch=Math.min((rd.node.stretch||100)+5,220);feRenderEl(rd);feInsUpdate();}
     else if(ev.key==='ArrowLeft'&&rd.node.type==='free'&&_nodeCanStretchX(rd.node)){rd.node.stretch=Math.max((rd.node.stretch||100)-5,30);feRenderEl(rd);feInsUpdate();}
     clearTimeout(onFEKey._t);onFEKey._t=setTimeout(()=>feSnap(),400);
   } else {
-    // Flèches = déplacement de tous les sélectionnés
-    const step=arrowStep(ev.shiftKey);
-    editableRds.forEach(rd=>{
-      if(ev.key==='ArrowLeft')  rd.x=Math.max(0,rd.x-step);
-      if(ev.key==='ArrowRight') rd.x=rd.x+step;
-      if(ev.key==='ArrowUp')    rd.y=Math.max(0,rd.y-step);
-      if(ev.key==='ArrowDown')  rd.y=rd.y+step;
-      if(showGrid){rd.x=snapVal(rd.x);rd.y=snapVal(rd.y);}
-      const wrap=document.getElementById(rd.id);
-      if(wrap){wrap.style.left=rd.x+'px';wrap.style.top=rd.y+'px';}
-      feInsUpdatePos(rd);
+    // Flèches = déplacement de tous les sélectionnés (+ éléments attachés)
+    const step=arrowStep(ev.shiftKey),k=ev.key,set=_feDragSet(editableRds);
+    _feMoveSet(set,(x,y)=>{
+      if(k==='ArrowLeft')  x=Math.max(0,x-step);
+      if(k==='ArrowRight') x+=step;
+      if(k==='ArrowUp')    y=Math.max(0,y-step);
+      if(k==='ArrowDown')  y+=step;
+      return showGrid?[snapVal(x),snapVal(y)]:[x,y];
     });
-    chkConflict();if(showBB)renderBBs();
+    _feNudge(set);
     clearTimeout(onFEKey._t);onFEKey._t=setTimeout(()=>feSnap(),400);
   }
 }
@@ -1586,8 +1605,8 @@ function insertToDoc(){
   const textEls=feEls.filter(rd=>rd.type==='textbox');
   let created=0,updated=0;
 
-  // ── Math elements grouped into visual lines ───────────────────────────
-  _groupMathEls(mathEls).forEach(group=>{
+  // ── Math elements grouped into visual lines (attached ones stay with their base) ──
+  _semLines(mathEls).forEach(group=>{
     const existingDocId=group.reduce((found,rd)=>{
       return found||((_syncMap.has(rd.id))?_syncMap.get(rd.id):null);
     },null);
@@ -1899,6 +1918,7 @@ function _renderTextBox(rd){
       window.removeEventListener('mousemove',onMove);
       window.removeEventListener('mouseup',onUp);
       wrap.classList.remove('being-moved');
+      if(moved)_feNudge(snap);
       snap=[];
 
       if(moved){ feSnap(); return; }
@@ -2049,7 +2069,7 @@ function chkConflict(){
   feEls.forEach(d=>{
     const el=document.getElementById(d.id);if(!el)return;
     const mb=bxs.find(x=>x.d.id===d.id)?.box;if(!mb)return;
-    const cf=bxs.some(x=>x.d.id!==d.id&&ovlp(mb,x.box));
+    const cf=bxs.some(x=>x.d.id!==d.id&&!_semLinked(d,x.d)&&ovlp(mb,x.box));
     el.classList.toggle('conflict',cf&&feSelId===d.id);
   });
 }
@@ -2315,6 +2335,9 @@ function feInsUpdate(){
 
   // Collision margin
   _setR('ins-mg',rd.margin||5,'ins-mg-lbl',v=>v+'px');
+
+  // Semantic relation + automatic size note
+  _semInsUpdate(rd);
 }
 
 function feInsUpdatePos(rd){
@@ -2358,7 +2381,7 @@ function uMultiSz(v){
   v=Math.max(14,Math.min(120,v));
   const sl=g('multi-sz'),nm=g('multi-sz-num');
   if(sl)sl.value=v;if(nm)nm.value=v;
-  feEls.filter(e=>feSelIds.has(e.id)&&canEdit(e.layerId)).forEach(rd=>{rd.size=v;feRenderEl(rd);});
+  _feSetSz(feEls.filter(e=>feSelIds.has(e.id)&&canEdit(e.layerId)),v);
   clearTimeout(uMultiSz._t);uMultiSz._t=setTimeout(()=>feSnap(),400);
 }
 
@@ -2402,29 +2425,22 @@ function _selTargets(){
 // Update from sliders/inputs
 function uElSz(v){
   v=Math.max(14,Math.min(120,v));
-  _selTargets().forEach(rd=>{
-    rd.size=v;
-    // textboxes store font size separately
-    if(rd.type==='textbox'){rd.fontSize=v;rd._sizeOverride=true;}
-    feRenderEl(rd);
-  });
+  const rds=_selTargets();
+  // textboxes store font size separately
+  rds.forEach(rd=>{if(rd.type==='textbox'){rd.fontSize=v;rd._sizeOverride=true;}});
+  _feSetSz(rds,v);
   const sl=g('ins-sz'),nm=g('ins-sz-num');
   if(sl)sl.value=v;if(nm)nm.value=v;
   if(feSelIds.size<=1)feInsUpdate();
 }
-function uElPosX(v){
+// Position fields (axis 'x' | 'y') — attached elements follow, an attached one keeps the move
+function uElPos(axis,v){
   const rd=feEls.find(e=>e.id===feSelId);if(!rd||!canEdit(rd.layerId))return;
-  rd.x=Math.max(0,Math.round(v));
-  const el=document.getElementById(rd.id);if(el)el.style.left=rd.x+'px';
-  feInsUpdatePos(rd);chkConflict();if(showBB)renderBBs();
-  clearTimeout(uElPosX._t);uElPosX._t=setTimeout(()=>feSnap(),400);
-}
-function uElPosY(v){
-  const rd=feEls.find(e=>e.id===feSelId);if(!rd||!canEdit(rd.layerId))return;
-  rd.y=Math.max(0,Math.round(v));
-  const el=document.getElementById(rd.id);if(el)el.style.top=rd.y+'px';
-  feInsUpdatePos(rd);chkConflict();if(showBB)renderBBs();
-  clearTimeout(uElPosY._t);uElPosY._t=setTimeout(()=>feSnap(),400);
+  v=Math.max(0,Math.round(v));
+  const set=_feDragSet([rd]);
+  _feMoveSet(set,(x,y)=>axis==='x'?[v,y]:[x,v]);
+  _feNudge(set);
+  clearTimeout(uElPos._t);uElPos._t=setTimeout(()=>feSnap(),400);
 }
 function uElOp(v){
   const lbl=g('ins-op-lbl');if(lbl)lbl.textContent=v+'%';
@@ -2572,6 +2588,8 @@ async function processFont(file,opts={}){
 
     // FVS initial depuis les valeurs par défaut
     fd.fvs=axFVS(fd.axes);
+    // Script scale-downs from the MATH table (exponent / index size when snapping)
+    fd.math=await _mathConsts(ab);
 
     if(typeof _clearDelimCaches==='function')_clearDelimCaches();
     loadedFonts.push(fd);
@@ -2594,6 +2612,30 @@ async function _sha256Hex(ab){
 
 // ── Fallback parseur fvar binaire (Fixed 16.16 correctement lu) ─────────────
 // Utilisé uniquement si opentype.js n'est pas disponible.
+// ScriptPercentScaleDown / ScriptScriptPercentScaleDown from the MATH table → {sc, ssc}, or null.
+// OTF/TTF and WOFF (a compressed WOFF table is inflated); WOFF2 → null (defaults are used).
+async function _mathConsts(ab){
+  try{
+    const v=new DataView(ab),woff=v.getUint32(0)===0x774F4646; // 'wOFF'
+    const n=v.getUint16(woff?12:4),rec=woff?20:16;
+    for(let i=0;i<n;i++){
+      const r=(woff?44:12)+i*rec;
+      if(v.getUint32(r)!==0x4D415448)continue; // 'MATH'
+      // sfnt record: tag,checksum,offset,length · WOFF record: tag,offset,compLength,origLength,checksum
+      const off=v.getUint32(woff?r+4:r+8);
+      let t=new DataView(ab,off);
+      if(woff&&v.getUint32(r+8)<v.getUint32(r+12)){ // compLength < origLength → zlib
+        const z=new Blob([new Uint8Array(ab,off,v.getUint32(r+8))]).stream().pipeThrough(new DecompressionStream('deflate'));
+        t=new DataView(await new Response(z).arrayBuffer());
+      }
+      const c=t.getUint16(4); // MathConstants offset
+      const sc=t.getInt16(c),ssc=t.getInt16(c+2);
+      return sc>0&&sc<=100?{sc,ssc:ssc>0&&ssc<=100?ssc:0}:null;
+    }
+  }catch(_){}
+  return null;
+}
+
 function _parseFvarFallback(bytes){
   const view=new DataView(bytes.buffer);
   const axes=[];
@@ -2681,14 +2723,8 @@ function renderFontList(){
   szNum.className='font-sz-num';
   const szRow=document.createElement('div');szRow.className='font-sz-row';szRow.append(szSlider,szNum);
   const syncSz=(v)=>{
-    v=Math.min(120,Math.max(14,+v||50));
-    const layer=activeLayer();
-    layer.fontSize=v;
-    defaultFontSize=v;
+    v=_setLayerSz(v);
     szSlider.value=v;szNum.value=v;szValTxt.textContent=v+'px';
-    localStorage.setItem('limou-default-sz',v);
-    feEls.filter(e=>e.layerId===layer.id).forEach(rd=>{rd.size=v;feRenderEl(rd);});
-    _syncTextBoxes(layer.id);
     if(feSelId)feInsUpdate();
   };
   szSlider.oninput=()=>syncSz(+szSlider.value);
@@ -2936,6 +2972,8 @@ document.addEventListener('DOMContentLoaded',()=>{
   document.addEventListener('dragover',ev=>{
     if(ghost){ghost.style.left=ev.clientX+'px';ghost.style.top=ev.clientY+'px';}
   });
+  // Snap zones never outlive a keyboard drag (dropped elsewhere, cancelled with Esc…)
+  document.addEventListener('dragend',_semClear);
 });
 
 
@@ -3167,7 +3205,7 @@ function _showAccentPopup(baseChar,anchor,font,al){
     el.addEventListener('mousedown',ev=>{
       ev.preventDefault();
       ev.stopPropagation();
-      _startAccentDrag(v,font,al,ev.clientX,ev.clientY);
+      _closeAccentPopup();_startPointerKeyDrag(v,font,al,ev.clientX,ev.clientY);
     });
 
     popup.appendChild(el);
@@ -3188,58 +3226,34 @@ function _showAccentPopup(baseChar,anchor,font,al){
   setTimeout(()=>document.addEventListener('mousedown',_closeAccentPopupOutside,{once:true}),80);
 }
 
-// ── Pointer-based drag for accent keys ──────────────────────────────────────
-// Mimics HTML5 drag: creates ghost, tracks mouse, drops on canvas on mouseup.
-function _startAccentDrag(v,font,al,startX,startY){
-  // Close popup immediately — we have what we need
-  _closeAccentPopup();
-
-  // Set dragKey so ghost creation is consistent with HTML5 drag
+// ── Pointer drag for popup keys (accents, standalone delimiters) ──
+// Mimics HTML5 drag: ghost follows the mouse, snap zones show, drop on canvas on mouseup.
+// (Pointer events, not HTML5 drag: the HTML5 API cannot start after a long press.)
+function _startPointerKeyDrag(v,font,al,startX,startY){
   dragKey=Object.assign({},v);
-
-  // Create ghost
   if(ghost){ghost.remove();ghost=null;}
-  ghost=document.createElement('div');
-  ghost.className='drag-ghost';
-  ghost.textContent=v.s;
-  ghost.style.fontFamily=font;
-  ghost.style.left=startX+'px';
-  ghost.style.top=startY+'px';
+  ghost=document.createElement('div');ghost.className='drag-ghost';
+  ghost.textContent=v.s;ghost.style.fontFamily=font;
+  ghost.style.left=startX+'px';ghost.style.top=startY+'px';
   if(al.fvs)ghost.style.fontVariationSettings=al.fvs;
   document.body.appendChild(ghost);
-
-  // Highlight canvas as drop target when cursor is over it
   const canvas=g('fe-canvas');
-
   function onMove(ev){
-    ghost.style.left=ev.clientX+'px';
-    ghost.style.top=ev.clientY+'px';
-    if(canvas){
-      const r=canvas.getBoundingClientRect();
-      const over=ev.clientX>=r.left&&ev.clientX<=r.right&&ev.clientY>=r.top&&ev.clientY<=r.bottom;
-      canvas.style.outline=over?'2px solid var(--accent)':'';
-    }
+    ghost.style.left=ev.clientX+'px';ghost.style.top=ev.clientY+'px';
+    if(canvas)canvas.style.outline=_semKeyAt(ev.clientX,ev.clientY)?'2px solid var(--accent)':'';
   }
-
   function onUp(ev){
-    document.removeEventListener('mousemove',onMove);
-    document.removeEventListener('mouseup',onUp);
-
+    document.removeEventListener('mousemove',onMove);document.removeEventListener('mouseup',onUp);
     if(ghost){ghost.remove();ghost=null;}
-    if(canvas)canvas.style.outline='';
-
     if(canvas){
+      canvas.style.outline='';
       const r=canvas.getBoundingClientRect();
-      if(ev.clientX>=r.left&&ev.clientX<=r.right&&ev.clientY>=r.top&&ev.clientY<=r.bottom){
-        const x=snapVal(ev.clientX-r.left),y=snapVal(ev.clientY-r.top);
-        _dropKeyOnCanvas(v,x,y);
-      }
+      if(ev.clientX>=r.left&&ev.clientX<=r.right&&ev.clientY>=r.top&&ev.clientY<=r.bottom)
+        _dropKeyOnCanvas(v,snapVal(ev.clientX-r.left),snapVal(ev.clientY-r.top));
     }
-    dragKey=null;
+    _semClear();dragKey=null;
   }
-
-  document.addEventListener('mousemove',onMove);
-  document.addEventListener('mouseup',onUp);
+  document.addEventListener('mousemove',onMove);document.addEventListener('mouseup',onUp);
 }
 
 function _closeAccentPopup(){
@@ -3270,7 +3284,7 @@ function _showStructVariantPopup(keyId,anchor,font,al){
     el.addEventListener('mousedown',ev=>{
       ev.preventDefault();ev.stopPropagation();
       _closeStructVariantPopup();
-      _startStructDrag(v,font,al,ev.clientX,ev.clientY);
+      _startPointerKeyDrag(v,font,al,ev.clientX,ev.clientY);
     });
     popup.appendChild(el);
   });
@@ -3290,34 +3304,6 @@ function _closeStructVariantPopup(){
 }
 function _closeStructVariantPopupOutside(ev){
   if(_kbStructPopup&&!_kbStructPopup.contains(ev.target))_closeStructVariantPopup();
-}
-
-// ── Pointer drag for struct variant keys — mirrors _startAccentDrag ──────────
-function _startStructDrag(v,font,al,startX,startY){
-  dragKey=Object.assign({},v);
-  if(ghost){ghost.remove();ghost=null;}
-  ghost=document.createElement('div');ghost.className='drag-ghost';
-  ghost.textContent=v.s;ghost.style.fontFamily=font;
-  ghost.style.left=startX+'px';ghost.style.top=startY+'px';
-  if(al.fvs)ghost.style.fontVariationSettings=al.fvs;
-  document.body.appendChild(ghost);
-  const canvas=g('fe-canvas');if(!canvas)return;
-  function onMove(ev){
-    ghost.style.left=ev.clientX+'px';ghost.style.top=ev.clientY+'px';
-    const r=canvas.getBoundingClientRect();
-    canvas.style.outline=(ev.clientX>=r.left&&ev.clientX<=r.right&&ev.clientY>=r.top&&ev.clientY<=r.bottom)?'2px solid var(--accent)':'';
-  }
-  function onUp(ev){
-    document.removeEventListener('mousemove',onMove);document.removeEventListener('mouseup',onUp);
-    if(ghost){ghost.remove();ghost=null;}
-    canvas.style.outline='';
-    const r=canvas.getBoundingClientRect();
-    if(ev.clientX>=r.left&&ev.clientX<=r.right&&ev.clientY>=r.top&&ev.clientY<=r.bottom){
-      _dropKeyOnCanvas(v,snapVal(ev.clientX-r.left),snapVal(ev.clientY-r.top));
-    }
-    dragKey=null;
-  }
-  document.addEventListener('mousemove',onMove);document.addEventListener('mouseup',onUp);
 }
 
 function filterKb(q){
@@ -3872,29 +3858,31 @@ function seqHTML(arr,sz){
 
 'use strict';
 // ═══════════════════════════════════════════════════════════════════════════
-// SEMANTIC TREE — snap relations → tree → MathML
+// SEMANTIC RELATIONS — snapping (exponents, indices, limits)
 // ═══════════════════════════════════════════════════════════════════════════
 // Dropping a math element in a snap zone of another one attaches it:
-//   rd.att = {to:<base element id>, rel:'sup'|'sub'|'over'|'under'}
-// Attached elements move, duplicate and delete with their base (_feDragSet,
-// feDelById). The tree itself is never stored: _semBuild() derives it from
-// feEls on demand, so saved work, undo and the account need no new fields.
+//   rd.att = {to:<base id>, rel:'sup'|'sub'|'over'|'under', dx?, dy?}
+//     dx/dy = the user's fine-tuning (arrows, inspector) on top of the automatic place
+//   rd._szOrig   size before it was attached (given back on detach)
+//   rd._szManual size set by hand while attached (no longer follows its base)
+// Attached elements move, duplicate and delete with their base (_feDragSet, feDuplicate,
+// feDelById). It is all plain data on feEls: undo, saved work, equations and the account
+// carry it with no extra code.
 
-const _SEM_FN=['arcsin','arccos','arctan','sinh','cosh','tanh','sin','cos','tan','cot','sec','csc','log','ln','exp','lim','max','min','sup','inf','det','gcd','deg','arg','dim','ker'];
-const _SEM_BIG='∑∏∐∫∬∭∮⋃⋂⨁⨂⨀';
-const _SEM_ID='∞∅∂ℏ';
-// Unicode super/subscript characters → their content (²  → 2)
-const _SEM_SS={sup:['⁰¹²³⁴⁵⁶⁷⁸⁹⁺⁻⁼⁽⁾ⁿⁱ','0123456789+−=()ni'],sub:['₀₁₂₃₄₅₆₇₈₉₊₋₌₍₎','0123456789+−=()']};
-// Letters MathML would italicize on its own — Limou shows them upright, so keep them upright
-const _SEM_AUTOIT=/^[A-Za-zΑ-Ωα-ωϑϕϖϰϱϵıȷ∂∇]$/u;
-
-// ── Relations between canvas elements ──
+const _SEM_RELS=['sup','sub','over','under'];
 const _semEl=id=>feEls.find(e=>e.id===id);
 const _semIsBig=rd=>rd.node?.type==='op'||rd.node?.k==='lim'||rd.node?.k==='iint';
 const _semRoot=rd=>!rd.att||!_semEl(rd.att.to);
+const _semLabel=rd=>rd?.node?(rd.node.text||rd.node.s||rd.node.lbl||'?'):'?';
 function _semKids(id,rel){return feEls.filter(e=>e.att?.to===id&&(!rel||e.att.rel===rel)).sort((a,b)=>a.x-b.x);}
 function _semDesc(id,out=new Set()){_semKids(id).forEach(k=>{if(!out.has(k.id)){out.add(k.id);_semDesc(k.id,out);}});return out;}
-// Parent/child or same-slot siblings — touching on purpose, never a collision
+// Top of rd's attachment chain, and how deep rd sits in it (0 = free element)
+function _semTop(rd){
+  let depth=0;const seen=new Set([rd.id]);
+  while(!_semRoot(rd)){const p=_semEl(rd.att.to);if(seen.has(p.id))break;seen.add(p.id);rd=p;depth++;}
+  return{top:rd,depth};
+}
+// Parent/child or same-slot siblings touch on purpose — never a collision
 function _semLinked(a,b){return a.att?.to===b.id||b.att?.to===a.id||(!!a.att&&!!b.att&&a.att.to===b.att.to&&a.att.rel===b.att.rel);}
 
 // Visible glyph box of an element, in canvas coordinates
@@ -3904,13 +3892,22 @@ function _semRect(rd){
   return{x1:r.left-c.left,y1:r.top-c.top,x2:r.right-c.left,y2:r.bottom-c.top};
 }
 
-// Snap zones around a base. Scripts accept nesting in their own direction only
-// (e^{x²}, x_{i_j}); limits accept an exponent. The middle band stays free for
-// elements placed on the baseline next to the base.
+// ── Script size ──
+// ScriptPercentScaleDown / ScriptScriptPercentScaleDown from the font's MATH table
+// (read at import, see _mathConsts), else the usual 70 % / 50 %
+function _semScale(top,depth){
+  const m=loadedFonts.find(f=>f.css===layerById(top.layerId)?.font)?.math,v=m&&(depth>1?m.ssc:m.sc);
+  return{pct:v||(depth>1?50:70),fromFont:!!v};
+}
+function _semAutoSz(rd){const{top,depth}=_semTop(rd);return Math.max(6,Math.round(top.size*_semScale(top,depth).pct/100));}
+
+// ── Snap zones ──
+// Scripts accept nesting in their own direction only (e^{x²}, x_{i_j}); limits accept an
+// exponent. The middle band stays free for elements placed on the baseline next to the base.
 function _semZones(rd,exclude){
   const r=_semRect(rd);if(!r)return[];
   const w=r.x2-r.x1,h=r.y2-r.y1,s=Math.max(h*.9,16),R=r.x2-w*.1;
-  const rels=rd.att?[rd.att.rel==='sub'?'sub':'sup']:['sup','sub',...(_semIsBig(rd)?['over','under']:[])];
+  const rels=_semRoot(rd)?['sup','sub',...(_semIsBig(rd)?['over','under']:[])]:[rd.att.rel==='sub'?'sub':'sup'];
   return rels.map(rel=>{
     const z=rel==='sup'?{x1:R,y1:r.y1-h*.5,x2:r.x2+s,y2:r.y1+h*.35}
       :rel==='sub'?{x1:R,y1:r.y1+h*.65,x2:r.x2+s,y2:r.y2+h*.5}
@@ -3926,8 +3923,8 @@ function _semZones(rd,exclude){
   });
 }
 
-let _semHit=null; // zone under the dragged item, read on drop
-// px,py: centre of the dragged item (canvas coords); exclude: ids being dragged
+let _semHit=null; // zone under the dragged item — read on drop
+// px,py: centre of the dragged item (canvas coords) · exclude: ids being dragged
 function _semHover(px,py,exclude){
   let best=null,near=null,nd=Infinity;
   feEls.forEach(rd=>{
@@ -3939,7 +3936,7 @@ function _semHover(px,py,exclude){
     const area=(r.x2-r.x1)*h;
     _semZones(rd,exclude).forEach(z=>{
       if(px<z.x1||px>z.x2||py<z.y1||py>z.y2)return;
-      // Smallest base wins (nested exponent); then a slot that already has content
+      // Smallest base wins (nested exponent), then a slot that already has content
       if(!best||area<best.area||(area===best.area&&z.kids>best.kids))best={...z,area};
     });
   });
@@ -3948,6 +3945,8 @@ function _semHover(px,py,exclude){
 }
 function _semDraw(rd,exclude){
   let box=g('sem-zones');
+  const st=g('st-snap');
+  if(st)st.textContent=_semHit?`${t('sem-release')} ${t('sem-'+_semHit.rel)} ${t('sem-of')} ${_semLabel(_semHit.rd)}`:'';
   if(!rd){box?.remove();return;}
   if(!box){box=document.createElement('div');box.id='sem-zones';g('fe-canvas').appendChild(box);}
   box.innerHTML='';
@@ -3955,11 +3954,11 @@ function _semDraw(rd,exclude){
     const on=_semHit?.rd===rd&&_semHit.rel===z.rel;
     const d=document.createElement('div');d.className='sem-zone'+(on?' on':'');
     d.style.cssText=`left:${z.x1}px;top:${z.y1}px;width:${z.x2-z.x1}px;height:${z.y2-z.y1}px`;
-    if(on)d.textContent=t('sem-'+z.rel);
+    d.textContent=t('sem-'+z.rel);
     box.appendChild(d);
   });
 }
-function _semClear(){_semHit=null;g('sem-zones')?.remove();}
+function _semClear(){_semHit=null;g('sem-zones')?.remove();const st=g('st-snap');if(st)st.textContent='';}
 
 // Keyboard key dragged over the canvas (HTML5 drag or popup pointer drag).
 // The ghost is centred on the cursor, so the cursor is the item's centre.
@@ -3972,16 +3971,37 @@ function _semKeyAt(cx,cy){
 function _semKeyOver(ev){if(dragKey&&!_eqDragId)_semKeyAt(ev.clientX,ev.clientY);}
 function _semKeyLeave(ev){if(!g('fe-canvas').contains(ev.relatedTarget))_semClear();}
 
-// Apply the current zone to rd on drop: attach, move to another slot, or detach
+// ── Attach / detach ──
+// Apply the zone under rd at drop time: attach, move to another slot, or detach
 function _semDrop(rd){
-  const old=rd.att,hit=_semHit;_semClear();
-  if(hit)rd.att={to:hit.rd.id,rel:hit.rel};else delete rd.att;
-  if(old&&_semEl(old.to)&&(!hit||old.to!==hit.rd.id||old.rel!==hit.rel))_semLayout(_semEl(old.to),old.rel);
-  if(hit)_semLayout(hit.rd,hit.rel);
-  if(hit||old){chkConflict();if(showBB)renderBBs();}
+  const old=_semRoot(rd)?null:rd.att,hit=_semHit;_semClear();
+  if(!hit&&!old)return;
+  if(hit){
+    if(!old)rd._szOrig=rd.size;
+    rd.att={to:hit.rd.id,rel:hit.rel}; // a new drop also resets fine-tuning
+  }else{
+    delete rd.att;
+    if(!rd._szManual&&rd._szOrig){rd.size=rd._szOrig;feRenderEl(rd);}
+    delete rd._szOrig;delete rd._szManual;
+    _semFit(rd);
+  }
+  const ob=old&&_semEl(old.to);
+  if(ob&&ob!==hit?.rd)_semFit(_semTop(ob).top);
+  if(hit)_semFit(_semTop(hit.rd).top);
+  chkConflict();if(showBB)renderBBs();
 }
 
-// Line up the content of one slot next to / above / below its base
+// Re-size (unless set by hand) and re-place everything attached below base
+function _semFit(base,seen=new Set()){
+  if(seen.has(base.id))return;seen.add(base.id);
+  _SEM_RELS.forEach(rel=>{
+    const kids=_semKids(base.id,rel);if(!kids.length)return;
+    kids.forEach(k=>{if(!k._szManual){const s=_semAutoSz(k);if(s!==k.size){k.size=s;feRenderEl(k);}}});
+    _semLayout(base,rel);
+    kids.forEach(k=>_semFit(k,seen));
+  });
+}
+// Line up one slot next to / above / below its base, plus each element's own fine-tuning
 function _semLayout(base,rel){
   const r=_semRect(base);if(!r)return;
   const h=r.y2-r.y1,kids=_semKids(base.id,rel),rects=kids.map(_semRect);
@@ -3991,17 +4011,47 @@ function _semLayout(base,rel){
     const kr=rects[i];if(!kr)return;
     const kh=kr.y2-kr.y1;
     const top=rel==='over'?r.y1-kh:rel==='under'?r.y2:(rel==='sup'?r.y1+h*.25:r.y1+h*.8)-kh/2;
-    _semShift(k,Math.round(x-kr.x1),Math.round(top-kr.y1));
+    _semShift(k,Math.round(x-kr.x1+(k.att.dx||0)),Math.round(top-kr.y1+(k.att.dy||0)));
     x+=kr.x2-kr.x1;
   });
+}
+// Any change of an element's box (size, typing in a slot, stretch, MATH params, a font
+// loading late) re-sizes and re-places what is attached in its chain. Moves never resize,
+// and _semFit is idempotent, so this cannot loop.
+const _semRO=typeof ResizeObserver==='undefined'?null:new ResizeObserver(entries=>{
+  const tops=new Set();
+  entries.forEach(({target})=>{
+    if(!target.isConnected){_semRO.unobserve(target);return;}
+    const rd=_semEl(target.parentNode.id);if(rd&&rd.type!=='textbox')tops.add(_semTop(rd).top);
+  });
+  tops.forEach(t=>_semFit(t));
+});
+// Size set from the UI (inspector, Alt+↑↓, multi-selection, profile): an attached element
+// sized by hand keeps that size; what hangs below it follows through _semRO
+function _feSetSz(rds,v){rds.forEach(rd=>{rd.size=v;if(!_semRoot(rd))rd._szManual=true;feRenderEl(rd);});}
+// Layer default size: free elements take it, attached ones follow their base
+function _setLayerSz(v){
+  v=Math.min(120,Math.max(14,+v||50));
+  const layer=activeLayer();layer.fontSize=v;defaultFontSize=v;
+  localStorage.setItem('limou-default-sz',v);
+  feEls.filter(e=>e.layerId===layer.id&&_semRoot(e)).forEach(rd=>{rd.size=v;feRenderEl(rd);});
+  _syncTextBoxes(layer.id);
+  return v;
 }
 function _semShift(rd,dx,dy){
   if(!dx&&!dy)return;
   [rd.id,..._semDesc(rd.id)].forEach(id=>{const e=_semEl(id);if(e){e.x+=dx;e.y+=dy;_feElPos(e);}});
 }
 
-// Visual lines of root elements (_groupMathEls), each followed by its attached elements.
-// A broken chain (e.g. a cycle in old data) is repaired and kept visible.
+// Copies (duplicate, equation insert): keep links whose base is copied too, drop the others
+function _semRemap(cl,ids){
+  if(!cl.att)return;
+  if(ids.has(cl.att.to))cl.att.to=ids.get(cl.att.to);
+  else{delete cl.att;delete cl._szOrig;delete cl._szManual;}
+}
+
+// Visual lines of free elements (_groupMathEls), each followed by what is attached to it.
+// A broken chain (e.g. a loop in damaged data) is repaired and kept visible.
 function _semLines(els){
   const lines=_groupMathEls(els.filter(_semRoot))
     .map(gr=>gr.concat(...gr.map(rd=>[..._semDesc(rd.id)].map(_semEl).filter(Boolean))));
@@ -4010,173 +4060,28 @@ function _semLines(els){
   return lines;
 }
 
-// ── Tree ──
-// {t:'row',c:[]} · {t:'mi'|'mn'|'mo',v,big?,fence?,fn?} · {t:'frac',num,den,obl}
-// {t:'sqrt',c} · {t:'root',c,idx} · {t:'fence',open,close,c} · {t:'scr',base,sup?,sub?,over?,under?}
-// Nodes made from a canvas element carry its id.
-const _semRow=c=>({t:'row',c});
-const _semOne=c=>c.length===1?c[0]:_semRow(c);
-
-// Text → raw tokens (scripts 'ss' are resolved later by _semNorm)
-function _semTok(s){
-  const cs=Array.from(String(s||'')),out=[];
-  for(let i=0;i<cs.length;){
-    const c=cs[i];
-    if(/\s/.test(c)){i++;continue;}
-    const rel=Object.keys(_SEM_SS).find(k=>_SEM_SS[k][0].includes(c));
-    if(rel){const[from,to]=_SEM_SS[rel];let v='';while(i<cs.length&&from.includes(cs[i]))v+=to[from.indexOf(cs[i++])];out.push({t:'ss',rel,v});continue;}
-    if(/\p{Nd}/u.test(c)){
-      let j=i;while(j<cs.length&&/[\p{Nd}.]/u.test(cs[j]))j++;while(cs[j-1]==='.')j--;
-      out.push({t:'mn',v:cs.slice(i,j).join('')});i=j;continue;
-    }
-    if(/\p{L}/u.test(c)){
-      const rest=cs.slice(i).join(''),fn=_SEM_FN.find(f=>rest.startsWith(f));
-      if(fn){out.push({t:'mi',v:fn,fn:true});i+=fn.length;continue;}
-      out.push({t:'mi',v:c});i++;continue;
-    }
-    out.push(_SEM_ID.includes(c)?{t:'mi',v:c}:{t:'mo',v:c,big:_SEM_BIG.includes(c)});i++;
-  }
-  return out;
+// ── Inspector ──
+function _semInsUpdate(rd){
+  const att=!_semRoot(rd)&&rd.att,sec=g('ins-rel-sec'),note=g('ins-sz-note');
+  if(sec)sec.style.display=att?'':'none';
+  if(note)note.style.display=att?'':'none';
+  if(!att)return;
+  g('ins-rel-chip').textContent=t('sem-'+att.rel);
+  g('ins-rel-base').textContent=_semLabel(_semEl(att.to));
+  const{top,depth}=_semTop(rd),sc=_semScale(top,depth);
+  note.innerHTML=rd._szManual
+    ?`<span class="sem-chip off">${t('sem-manual')}</span><span>${t('sem-manual-hint')}</span>`+
+     `<button class="ins-btn red" onclick="semResetSz()">${t('sem-auto-reset')}</button>`
+    :`<span class="sem-chip">auto</span><span>${sc.pct} % ${t('sem-of-base')} · `+
+     `${sc.fromFont?(depth>1?'ScriptScriptPercentScaleDown':'ScriptPercentScaleDown'):t('sem-default')}</span>`;
 }
-
-// Row clean-up: ² attaches to what precedes it, 1 2 → 12, 3 . 5 → 3.5, sin x → sin⁡x
-function _semNorm(list){
-  const out=[];
-  list.forEach(n=>{
-    const p=out[out.length-1];
-    if(n.t==='ss'){
-      const sc=_semOne(_semNorm(_semTok(n.v)));
-      if(p?.t==='scr'&&!p[n.rel])p[n.rel]=sc;
-      else out.splice(out.length-(p?1:0),p?1:0,{t:'scr',base:p||_semRow([]),[n.rel]:sc});
-      return;
-    }
-    if(n.t==='mn'&&p?.t==='mn'){p.v+=n.v;return;}
-    if(n.t==='mn'&&p?.t==='mo'&&p.v==='.'&&out[out.length-2]?.t==='mn'){out.pop();out[out.length-1].v+='.'+n.v;return;}
-    out.push(n);
-  });
-  for(let i=out.length-2;i>=0;i--){
-    const b=out[i].t==='scr'?out[i].base:out[i];
-    if(b.fn&&out[i+1].v!=='⁡')out.splice(i+1,0,{t:'mo',v:'⁡'});
-  }
-  return out;
+function semDetach(){
+  const rd=_semEl(feSelId);if(!rd||_semRoot(rd)||!canEdit(rd.layerId))return;
+  _semHit=null;_semDrop(rd);feInsUpdate();feSnap();
 }
-
-// One math node (any depth) → list of semantic nodes
-function _semNode(n){
-  if(!n)return[];
-  switch(n.type){
-    case'frac':return[{t:'frac',obl:!!n.obl,num:_semSeq(n.ns),den:_semSeq(n.ds)}];
-    case'rad': return[n.deg?{t:'root',c:_semSeq(n.bs),idx:{t:'mn',v:String(n.deg)}}:{t:'sqrt',c:_semSeq(n.bs)}];
-    case'delim':return[{t:'fence',open:n.open,close:n.close,c:_semRow(_semNorm(_semTok(n.bodyText)))}];
-    case'hdelim':{const d=_DS[n.delim],s=d&&(d.paired?(n.half==='L'?d.L:d.R):d.O);return[{t:'mo',v:s?s.nat:(n.s||'?'),fence:true}];}
-    case'op':{const v=n.text||n.s;return[_SEM_BIG.includes(v)?{t:'mo',v,big:true}:{t:'mi',v}];}
-    default:return _semTok(n.text||n.s);
-  }
-}
-function _semSeq(arr){return _semRow(_semNorm((arr||[]).flatMap(i=>i.type==='text'?_semTok(i.text):_semNode(i))));}
-
-// One canvas element + everything attached to it
-function _semElNode(rd,seen){
-  seen.add(rd.id);
-  const base=_semNode(rd.node),slots={};
-  ['sup','sub','over','under'].forEach(rel=>{
-    const k=_semKids(rd.id,rel).filter(e=>!seen.has(e.id));
-    if(k.length)slots[rel]=_semOne(_semNorm(k.flatMap(e=>_semElNode(e,seen))));
-  });
-  if(!Object.keys(slots).length){if(base[0])base[0].id=rd.id;return base;}
-  return[{t:'scr',id:rd.id,base:_semOne(_semNorm(base)),...slots}];
-}
-
-// Whole canvas (or any list of elements) → {t:'math',lines:[row,…]}
-function _semBuild(els=feEls){
-  const seen=new Set();
-  return{t:'math',lines:_semLines(els.filter(rd=>rd.type!=='textbox')).map(line=>
-    _semRow(_semNorm(line.filter(_semRoot).sort((a,b)=>a.x-b.x).flatMap(rd=>_semElNode(rd,seen)))))};
-}
-
-// ── MathML ──
-function _semScrTags(n){
-  return[n.over&&n.under?'munderover':n.over?'mover':n.under?'munder':'',
-         n.sup&&n.sub?'msubsup':n.sup?'msup':n.sub?'msub':''];
-}
-function _semML(n){
-  if(!n)return'<mrow></mrow>';
-  const M=_semML,e=escH;
-  switch(n.t){
-    case'row':  return n.c.length===1?M(n.c[0]):`<mrow>${n.c.map(M).join('')}</mrow>`;
-    case'mi':   return`<mi${_SEM_AUTOIT.test(n.v)?' mathvariant="normal"':''}>${e(n.v)}</mi>`;
-    case'mn':   return`<mn>${e(n.v)}</mn>`;
-    case'mo':   return`<mo${n.big?' largeop="true"':''}${n.fence?' fence="true" stretchy="true"':''}>${e(n.v)}</mo>`;
-    case'frac': return n.obl?`<mrow>${M(n.num)}<mo>/</mo>${M(n.den)}</mrow>`:`<mfrac>${M(n.num)}${M(n.den)}</mfrac>`;
-    case'sqrt': return`<msqrt>${M(n.c)}</msqrt>`;
-    case'root': return`<mroot>${M(n.c)}${M(n.idx)}</mroot>`;
-    case'fence':return`<mrow><mo fence="true" form="prefix">${e(n.open)}</mo>${M(n.c)}<mo fence="true" form="postfix">${e(n.close)}</mo></mrow>`;
-    case'scr':{
-      const[v,s]=_semScrTags(n);let b=M(n.base);
-      if(v)b=`<${v}>${b}${M(v==='mover'?n.over:n.under)}${v==='munderover'?M(n.over):''}</${v}>`;
-      if(s)b=`<${s}>${b}${M(s==='msup'?n.sup:n.sub)}${s==='msubsup'?M(n.sup):''}</${s}>`;
-      return b;
-    }
-    case'math': return n.lines.map(l=>`<math xmlns="http://www.w3.org/1998/Math/MathML" display="block">${M(l)}</math>`).join('\n');
-  }
-  return'';
-}
-
-// ── Tree tab (∑ mode, left panel) ──
-function _semRefresh(){
-  if(g('fe-pb-tree')?.classList.contains('hidden-pb')!==false)return;
-  cancelAnimationFrame(_semRefresh._f);_semRefresh._f=requestAnimationFrame(renderSemTree);
-}
-function _semFirstId(n){
-  if(!n||typeof n!=='object')return null;if(n.id)return n.id;
-  for(const v of Object.values(n)){const id=Array.isArray(v)?v.map(_semFirstId).find(Boolean):_semFirstId(v);if(id)return id;}
-  return null;
-}
-function _semOutline(n,role){
-  const li=document.createElement('li');
-  const lab=document.createElement('span');lab.className='sem-lbl'+(n.id?' has-id':'');
-  if(role)lab.innerHTML=`<span class="sem-role">${escH(t('sem-'+role))}</span>`;
-  const tag=n.t==='row'?'mrow':n.t==='scr'?_semScrTags(n).filter(Boolean).join(' · ')
-    :n.t==='frac'&&!n.obl?'mfrac':n.t==='frac'?'a/b':n.t==='sqrt'?'msqrt':n.t==='root'?'mroot':n.t==='fence'?'mrow':n.t;
-  lab.innerHTML+=`<span class="sem-tag">${tag}</span>`+
-    (n.v!=null?`<span class="sem-v">${escH(n.v)}</span>`:n.t==='fence'?`<span class="sem-v">${escH(n.open+' '+n.close)}</span>`:'');
-  if(n.id)lab.onclick=()=>{if(feEls.some(e=>e.id===n.id))feSelect(n.id);};
-  li.appendChild(lab);
-  const kids=n.t==='row'?n.c.map(c=>[c]):n.t==='frac'?[[n.num,'num'],[n.den,'den']]
-    :n.t==='sqrt'?[[n.c,'rad']]:n.t==='root'?[[n.c,'rad'],[n.idx,'deg']]:n.t==='fence'?[[n.c,'body']]
-    :n.t==='scr'?[[n.base,'base'],...['sub','sup','under','over'].filter(r=>n[r]).map(r=>[n[r],r])]:[];
-  const ul=document.createElement('ul');
-  kids.forEach(([c,r])=>{
-    if(c.v==='⁡')return;
-    if(c.t==='row'&&c.c.length===1)c=c.c[0];
-    if(c.t==='row'&&!c.c.length)return;
-    ul.appendChild(_semOutline(c,r));
-  });
-  if(ul.children.length)li.appendChild(ul);
-  return li;
-}
-function renderSemTree(){
-  const box=g('sem-tree');if(!box)return;
-  const lines=_semBuild().lines;box.innerHTML='';
-  if(!lines.length){box.innerHTML=`<div class="empty-msg" style="padding:6px">${t('sem-empty')}</div>`;return;}
-  lines.forEach((line,i)=>{
-    const card=document.createElement('div');card.className='sem-card';
-    const head=document.createElement('div');head.className='sem-card-head';head.textContent=t('sem-line')+' '+(i+1);
-    const prev=document.createElement('div');prev.className='sem-prev';
-    prev.innerHTML=_semML({t:'math',lines:[line]});
-    // Native MathML keeps the user's font (an OpenType MATH font gives the best result)
-    const layer=layerById(_semEl(_semFirstId(line))?.layerId)||activeLayer();
-    const mt=prev.firstElementChild;
-    if(mt){mt.style.fontFamily=layer.font||MFONT;if(layer.fvs)mt.style.fontVariationSettings=layer.fvs;}
-    const ul=document.createElement('ul');ul.className='sem-ol';
-    line.c.forEach(c=>{if(c.v!=='⁡')ul.appendChild(_semOutline(c));});
-    card.append(head,prev,ul);box.appendChild(card);
-  });
-}
-function semCopyML(){
-  if(!_guestOK('export'))return;
-  const tree=_semBuild();if(!tree.lines.length){toast(t('canvas-empty'));return;}
-  navigator.clipboard.writeText(_semML(tree)).then(()=>toast(t('sem-copied')),()=>toast(t('sem-copy-fail')));
+function semResetSz(){
+  const rd=_semEl(feSelId);if(!rd?._szManual)return;
+  delete rd._szManual;_semFit(_semTop(rd).top);feInsUpdate();feSnap();
 }
 
 
@@ -4369,12 +4274,8 @@ function _renderDocFontList(){
   const szN=document.createElement('input');szN.type='number';szN.min=14;szN.max=120;szN.step=2;szN.value=curSz;szN.className='font-sz-num';
   const szRow=document.createElement('div');szRow.className='font-sz-row';szRow.append(szSl,szN);
   const syncSz=(v)=>{
-    v=Math.min(120,Math.max(14,+v||50));
-    const layer=activeLayer();layer.fontSize=v;defaultFontSize=v;
+    v=_setLayerSz(v);
     szSl.value=v;szN.value=v;szVT.textContent=v+'px';
-    localStorage.setItem('limou-default-sz',v);
-    feEls.filter(e=>e.layerId===layer.id).forEach(rd=>{rd.size=v;feRenderEl(rd);});
-    _syncTextBoxes(layer.id);
   };
   szSl.oninput=()=>syncSz(+szSl.value);szN.oninput=()=>syncSz(+szN.value);
   szSec.append(szLR,szRow);list.appendChild(szSec);
@@ -4935,6 +4836,20 @@ const _I18N = {
   'guest-equations':      {en:'Sign in to save equations.',            fr:'Connectez-vous pour enregistrer des équations.'},
   'guest-profiles':       {en:'Sign in to save profiles.',             fr:'Connectez-vous pour enregistrer des profils.'},
   'guest-document':       {en:'Sign in to use Document mode.',         fr:'Connectez-vous pour utiliser le mode Document.'},
+  // Semantic relations (snapping)
+  'ph-relation':          {en:'Semantic relation', fr:'Relation sémantique'},
+  'sem-sup':              {en:'exponent',          fr:'exposant'},
+  'sem-sub':              {en:'index',             fr:'indice'},
+  'sem-over':             {en:'upper limit',       fr:'borne sup.'},
+  'sem-under':            {en:'lower limit',       fr:'borne inf.'},
+  'sem-of':               {en:'of',                fr:'de'},
+  'sem-release':          {en:'Release:',          fr:'Lâcher :'},
+  'sem-detach':           {en:'Detach',            fr:'Détacher'},
+  'sem-of-base':          {en:'of the base',       fr:'de la base'},
+  'sem-default':          {en:'default',           fr:'par défaut'},
+  'sem-manual':           {en:'manual',            fr:'manuel'},
+  'sem-manual-hint':      {en:'set by hand, no longer follows the base', fr:'réglée à la main, ne suit plus la base'},
+  'sem-auto-reset':       {en:'Back to auto',      fr:'Revenir en auto'},
 };
 
 // ── ID list for simple textContent swap ──────────────────────────────────────
@@ -5392,8 +5307,8 @@ function applyProfile(name){
   const rd=feEls.find(e=>e.id===feSelId);if(!rd)return;
   const prof=profiles[name];if(!prof)return;
   if(rd.node.k!==prof.node.k){toast(t('incompatible-node'));return;}
-  rd.size=prof.size;Object.assign(rd.node,JSON.parse(JSON.stringify(prof.node)));
-  feRenderEl(rd);feInsUpdate();toast(t('profile-applied')+' "'+name+'"');
+  Object.assign(rd.node,JSON.parse(JSON.stringify(prof.node)));
+  _feSetSz([rd],prof.size);feInsUpdate();toast(t('profile-applied')+' "'+name+'"');
 }
 
 function exportProfiles(){
