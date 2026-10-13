@@ -403,6 +403,21 @@ canvas.ruler { background: #f0f0f0; cursor: crosshair; user-select: none; displa
   box-sizing: border-box;
 }
 
+/* Semantic snapping — zones shown while dragging near an element */
+#sem-zones { position: absolute; inset: 0; pointer-events: none; z-index: 9997; }
+.sem-zone { position: absolute; box-sizing: border-box; border: 1px dashed var(--accent); border-radius: 4px;
+  background: color-mix(in srgb, var(--accent) 7%, transparent); font-size: 9px; color: var(--text2);
+  display: flex; justify-content: center; padding-top: 1px; white-space: nowrap; }
+.sem-zone.on { border: 2px solid var(--accent); background: color-mix(in srgb, var(--accent) 22%, transparent);
+  color: #111; font-weight: 600; }
+.st-snap { font-weight: 600; }
+/* Inspector: relation chip + automatic size note */
+.sem-chip { padding: 1px 7px; border-radius: 9px; background: var(--accent-soft); color: #111; font-size: 10px; font-weight: 600; }
+.sem-chip.off { background: #eee; color: var(--text2); }
+.sem-of { font-size: 11px; color: var(--text3); }
+.sem-base { font-family: var(--mfont); font-size: 15px; color: #111; }
+.sem-sz-note { font-size: 10px; color: var(--text2); line-height: 1.5; }
+
 /* Grid controls */
 #gc-bar { display: flex; align-items: center; gap: 6px; padding: 5px 10px; border-top: 1px solid #e8e8e8; background: #f5f5f5; font-size: 10px; color: #777; flex-shrink: 0; }
 #gc-bar input[type=range] { flex: 1; accent-color: var(--accent); }
