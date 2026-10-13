@@ -1152,9 +1152,13 @@ function feRenderEl(rd){
 
     if(!ed)return; // élément verrouillé : sélection ok, pas de drag
 
-    // Drag-move — supporte la multi-sélection
+    // Drag-move — supporte la multi-sélection (+ éléments attachés qui suivent)
     let ox=ev.clientX,oy=ev.clientY,dragging=true,moved=false;
-    let dragSnapshot=feEls.filter(e=>feSelIds.has(e.id)).map(e=>({rd:e,x0:e.x,y0:e.y}));
+    let dragSnapshot=_feDragSet(feEls.filter(e=>feSelIds.has(e.id)));
+    // One dragged math element (with its attached ones) → snap zones
+    const leads=dragSnapshot.filter(s=>!s.lead);
+    const semRd=leads.length===1&&leads[0].rd.type!=='textbox'?leads[0].rd:null;
+    const semEx=new Set(dragSnapshot.map(s=>s.rd.id));
     wrap.classList.add('being-moved');
     ev.preventDefault();
 
@@ -1162,14 +1166,9 @@ function feRenderEl(rd){
       if(!dragging)return;
       moved=true;
       const dx=e.clientX-ox,dy=e.clientY-oy;
-      dragSnapshot.forEach(({rd:r,x0,y0})=>{
-        r.x=showGrid?snapVal(x0+dx):Math.round(x0+dx);
-        r.y=showGrid?snapVal(y0+dy):Math.round(y0+dy);
-        const el=document.getElementById(r.id);
-        if(el){el.style.left=r.x+'px';el.style.top=r.y+'px';}
-        feInsUpdatePos(r);
-      });
-      chkConflict();if(showBB)renderBBs();
+      _feMoveSet(dragSnapshot,(x0,y0)=>[showGrid?snapVal(x0+dx):Math.round(x0+dx),showGrid?snapVal(y0+dy):Math.round(y0+dy)]);
+      const r=semRd&&_semRect(semRd);
+      if(r)_semHover((r.x1+r.x2)/2,(r.y1+r.y2)/2,semEx);
     }
     function onUp(e){
       // Clic simple (pas de drag) sur un élément déjà sélectionné sans Cmd/Ctrl
@@ -1177,7 +1176,8 @@ function feRenderEl(rd){
       if(!moved && feSelIds.size>1 && !(e.metaKey||e.ctrlKey)){
         feSelect(rd.id,false);
       }
-      if(dragging&&moved)feSnap();
+      if(dragging&&moved){if(semRd)_semDrop(semRd);feSnap();}
+      _semClear();
       dragging=false;moved=false;
       wrap.classList.remove('being-moved');
       dragSnapshot=[];
@@ -1188,6 +1188,27 @@ function feRenderEl(rd){
     window.addEventListener('mouseup',onUp);
   });
   g('fe-canvas').appendChild(wrap);
+  chkConflict();if(showBB)renderBBs();
+}
+
+// ── Moving elements — shared by mouse drag (math + text box), arrows, inspector ──
+function _feElPos(rd){const el=document.getElementById(rd.id);if(el){el.style.left=rd.x+'px';el.style.top=rd.y+'px';}}
+// Elements to move + the attached elements (rd.att) that follow their lead rigidly
+function _feDragSet(rds){
+  const ids=new Set(rds.map(r=>r.id)),set=rds.map(rd=>({rd,x0:rd.x,y0:rd.y}));
+  set.slice().forEach(lead=>_semDesc(lead.rd.id).forEach(id=>{
+    const rd=_semEl(id);if(!rd||ids.has(id))return;
+    ids.add(id);set.push({rd,x0:rd.x,y0:rd.y,lead});
+  }));
+  return set;
+}
+// pos(x0,y0) → [x,y] for each lead; followers keep their offset to their lead
+function _feMoveSet(set,pos){
+  set.forEach(s=>{if(!s.lead)[s.rd.x,s.rd.y]=pos(s.x0,s.y0);});
+  set.forEach(s=>{
+    if(s.lead){s.rd.x=s.x0+s.lead.rd.x-s.lead.x0;s.rd.y=s.y0+s.lead.rd.y-s.lead.y0;}
+    _feElPos(s.rd);if(!s.lead)feInsUpdatePos(s.rd);
+  });
   chkConflict();if(showBB)renderBBs();
 }
 
@@ -1862,7 +1883,7 @@ function _renderTextBox(rd){
     if(!ed)return;
 
     let ox=ev.clientX,oy=ev.clientY,moved=false;
-    let snap=feEls.filter(e=>feSelIds.has(e.id)).map(e=>({rd:e,x0:e.x,y0:e.y}));
+    let snap=_feDragSet(feEls.filter(e=>feSelIds.has(e.id)));
 
     // Prevent the browser from placing a text caret until we know it's a click not a drag
     ev.preventDefault();
@@ -1871,14 +1892,7 @@ function _renderTextBox(rd){
       if(!moved&&Math.abs(e.clientX-ox)+Math.abs(e.clientY-oy)<5)return;
       if(!moved){ moved=true; wrap.classList.add('being-moved'); }
       const ddx=e.clientX-ox,ddy=e.clientY-oy;
-      snap.forEach(({rd:r,x0,y0})=>{
-        r.x=showGrid?snapVal(x0+ddx):Math.round(x0+ddx);
-        r.y=showGrid?snapVal(y0+ddy):Math.round(y0+ddy);
-        const el=document.getElementById(r.id);
-        if(el){el.style.left=r.x+'px';el.style.top=r.y+'px';}
-        feInsUpdatePos(r);
-      });
-      chkConflict();if(showBB)renderBBs();
+      _feMoveSet(snap,(x0,y0)=>[showGrid?snapVal(x0+ddx):Math.round(x0+ddx),showGrid?snapVal(y0+ddy):Math.round(y0+ddy)]);
     }
 
     function onUp(e){
@@ -3851,6 +3865,318 @@ function nodeHTML(node,px){
 }
 function seqHTML(arr,sz){
   return arr.map(i=>i.type==='text'?escH(i.text||''):nodeHTML(i,sz)).join('');
+}
+
+
+/* === semantic.js === */
+
+'use strict';
+// ═══════════════════════════════════════════════════════════════════════════
+// SEMANTIC TREE — snap relations → tree → MathML
+// ═══════════════════════════════════════════════════════════════════════════
+// Dropping a math element in a snap zone of another one attaches it:
+//   rd.att = {to:<base element id>, rel:'sup'|'sub'|'over'|'under'}
+// Attached elements move, duplicate and delete with their base (_feDragSet,
+// feDelById). The tree itself is never stored: _semBuild() derives it from
+// feEls on demand, so saved work, undo and the account need no new fields.
+
+const _SEM_FN=['arcsin','arccos','arctan','sinh','cosh','tanh','sin','cos','tan','cot','sec','csc','log','ln','exp','lim','max','min','sup','inf','det','gcd','deg','arg','dim','ker'];
+const _SEM_BIG='∑∏∐∫∬∭∮⋃⋂⨁⨂⨀';
+const _SEM_ID='∞∅∂ℏ';
+// Unicode super/subscript characters → their content (²  → 2)
+const _SEM_SS={sup:['⁰¹²³⁴⁵⁶⁷⁸⁹⁺⁻⁼⁽⁾ⁿⁱ','0123456789+−=()ni'],sub:['₀₁₂₃₄₅₆₇₈₉₊₋₌₍₎','0123456789+−=()']};
+// Letters MathML would italicize on its own — Limou shows them upright, so keep them upright
+const _SEM_AUTOIT=/^[A-Za-zΑ-Ωα-ωϑϕϖϰϱϵıȷ∂∇]$/u;
+
+// ── Relations between canvas elements ──
+const _semEl=id=>feEls.find(e=>e.id===id);
+const _semIsBig=rd=>rd.node?.type==='op'||rd.node?.k==='lim'||rd.node?.k==='iint';
+const _semRoot=rd=>!rd.att||!_semEl(rd.att.to);
+function _semKids(id,rel){return feEls.filter(e=>e.att?.to===id&&(!rel||e.att.rel===rel)).sort((a,b)=>a.x-b.x);}
+function _semDesc(id,out=new Set()){_semKids(id).forEach(k=>{if(!out.has(k.id)){out.add(k.id);_semDesc(k.id,out);}});return out;}
+// Parent/child or same-slot siblings — touching on purpose, never a collision
+function _semLinked(a,b){return a.att?.to===b.id||b.att?.to===a.id||(!!a.att&&!!b.att&&a.att.to===b.att.to&&a.att.rel===b.att.rel);}
+
+// Visible glyph box of an element, in canvas coordinates
+function _semRect(rd){
+  const el=document.getElementById(rd.id)?.querySelector('.fe-mei');if(!el)return null;
+  const c=g('fe-canvas').getBoundingClientRect(),r=el.getBoundingClientRect();
+  return{x1:r.left-c.left,y1:r.top-c.top,x2:r.right-c.left,y2:r.bottom-c.top};
+}
+
+// Snap zones around a base. Scripts accept nesting in their own direction only
+// (e^{x²}, x_{i_j}); limits accept an exponent. The middle band stays free for
+// elements placed on the baseline next to the base.
+function _semZones(rd,exclude){
+  const r=_semRect(rd);if(!r)return[];
+  const w=r.x2-r.x1,h=r.y2-r.y1,s=Math.max(h*.9,16),R=r.x2-w*.1;
+  const rels=rd.att?[rd.att.rel==='sub'?'sub':'sup']:['sup','sub',...(_semIsBig(rd)?['over','under']:[])];
+  return rels.map(rel=>{
+    const z=rel==='sup'?{x1:R,y1:r.y1-h*.5,x2:r.x2+s,y2:r.y1+h*.35}
+      :rel==='sub'?{x1:R,y1:r.y1+h*.65,x2:r.x2+s,y2:r.y2+h*.5}
+      :rel==='over'?{x1:r.x1-w*.25,y1:r.y1-h*.9,x2:R,y2:r.y1+h*.15}
+      :{x1:r.x1-w*.25,y1:r.y2-h*.15,x2:R,y2:r.y2+h*.9};
+    // Grow sideways over what the slot already holds, so 2n or i=1 can be extended
+    let kids=0;
+    _semKids(rd.id,rel).forEach(k=>{
+      if(exclude?.has(k.id))return;const kr=_semRect(k);if(!kr)return;kids++;
+      z.x1=Math.min(z.x1,kr.x1);z.x2=Math.max(z.x2,kr.x2+Math.max(kr.y2-kr.y1,12)*.9);
+    });
+    return{...z,rel,rd,kids};
+  });
+}
+
+let _semHit=null; // zone under the dragged item, read on drop
+// px,py: centre of the dragged item (canvas coords); exclude: ids being dragged
+function _semHover(px,py,exclude){
+  let best=null,near=null,nd=Infinity;
+  feEls.forEach(rd=>{
+    if(rd.type==='textbox'||exclude.has(rd.id)||!layerById(rd.layerId)?.visible)return;
+    const r=_semRect(rd);if(!r)return;
+    const h=r.y2-r.y1,pad=Math.max(h,24);
+    if(px<r.x1-pad||px>r.x2+pad*1.5||py<r.y1-pad*1.2||py>r.y2+pad*1.2)return;
+    const d=Math.hypot(px-(r.x1+r.x2)/2,py-(r.y1+r.y2)/2);if(d<nd){nd=d;near=rd;}
+    const area=(r.x2-r.x1)*h;
+    _semZones(rd,exclude).forEach(z=>{
+      if(px<z.x1||px>z.x2||py<z.y1||py>z.y2)return;
+      // Smallest base wins (nested exponent); then a slot that already has content
+      if(!best||area<best.area||(area===best.area&&z.kids>best.kids))best={...z,area};
+    });
+  });
+  _semHit=best;
+  _semDraw(best?best.rd:near,exclude);
+}
+function _semDraw(rd,exclude){
+  let box=g('sem-zones');
+  if(!rd){box?.remove();return;}
+  if(!box){box=document.createElement('div');box.id='sem-zones';g('fe-canvas').appendChild(box);}
+  box.innerHTML='';
+  _semZones(rd,exclude).forEach(z=>{
+    const on=_semHit?.rd===rd&&_semHit.rel===z.rel;
+    const d=document.createElement('div');d.className='sem-zone'+(on?' on':'');
+    d.style.cssText=`left:${z.x1}px;top:${z.y1}px;width:${z.x2-z.x1}px;height:${z.y2-z.y1}px`;
+    if(on)d.textContent=t('sem-'+z.rel);
+    box.appendChild(d);
+  });
+}
+function _semClear(){_semHit=null;g('sem-zones')?.remove();}
+
+// Keyboard key dragged over the canvas (HTML5 drag or popup pointer drag).
+// The ghost is centred on the cursor, so the cursor is the item's centre.
+function _semKeyAt(cx,cy){
+  const cv=g('fe-canvas');if(!cv)return false;
+  const r=cv.getBoundingClientRect();
+  if(cx<r.left||cx>r.right||cy<r.top||cy>r.bottom){_semClear();return false;}
+  _semHover(cx-r.left,cy-r.top,new Set());return true;
+}
+function _semKeyOver(ev){if(dragKey&&!_eqDragId)_semKeyAt(ev.clientX,ev.clientY);}
+function _semKeyLeave(ev){if(!g('fe-canvas').contains(ev.relatedTarget))_semClear();}
+
+// Apply the current zone to rd on drop: attach, move to another slot, or detach
+function _semDrop(rd){
+  const old=rd.att,hit=_semHit;_semClear();
+  if(hit)rd.att={to:hit.rd.id,rel:hit.rel};else delete rd.att;
+  if(old&&_semEl(old.to)&&(!hit||old.to!==hit.rd.id||old.rel!==hit.rel))_semLayout(_semEl(old.to),old.rel);
+  if(hit)_semLayout(hit.rd,hit.rel);
+  if(hit||old){chkConflict();if(showBB)renderBBs();}
+}
+
+// Line up the content of one slot next to / above / below its base
+function _semLayout(base,rel){
+  const r=_semRect(base);if(!r)return;
+  const h=r.y2-r.y1,kids=_semKids(base.id,rel),rects=kids.map(_semRect);
+  const W=rects.reduce((s,k)=>s+(k?k.x2-k.x1:0),0);
+  let x=rel==='sup'||rel==='sub'?r.x2:(r.x1+r.x2-W)/2;
+  kids.forEach((k,i)=>{
+    const kr=rects[i];if(!kr)return;
+    const kh=kr.y2-kr.y1;
+    const top=rel==='over'?r.y1-kh:rel==='under'?r.y2:(rel==='sup'?r.y1+h*.25:r.y1+h*.8)-kh/2;
+    _semShift(k,Math.round(x-kr.x1),Math.round(top-kr.y1));
+    x+=kr.x2-kr.x1;
+  });
+}
+function _semShift(rd,dx,dy){
+  if(!dx&&!dy)return;
+  [rd.id,..._semDesc(rd.id)].forEach(id=>{const e=_semEl(id);if(e){e.x+=dx;e.y+=dy;_feElPos(e);}});
+}
+
+// Visual lines of root elements (_groupMathEls), each followed by its attached elements.
+// A broken chain (e.g. a cycle in old data) is repaired and kept visible.
+function _semLines(els){
+  const lines=_groupMathEls(els.filter(_semRoot))
+    .map(gr=>gr.concat(...gr.map(rd=>[..._semDesc(rd.id)].map(_semEl).filter(Boolean))));
+  const seen=new Set(lines.flat().map(rd=>rd.id)),rest=els.filter(rd=>!seen.has(rd.id));
+  if(rest.length){rest.forEach(rd=>delete rd.att);lines.push(..._groupMathEls(rest));}
+  return lines;
+}
+
+// ── Tree ──
+// {t:'row',c:[]} · {t:'mi'|'mn'|'mo',v,big?,fence?,fn?} · {t:'frac',num,den,obl}
+// {t:'sqrt',c} · {t:'root',c,idx} · {t:'fence',open,close,c} · {t:'scr',base,sup?,sub?,over?,under?}
+// Nodes made from a canvas element carry its id.
+const _semRow=c=>({t:'row',c});
+const _semOne=c=>c.length===1?c[0]:_semRow(c);
+
+// Text → raw tokens (scripts 'ss' are resolved later by _semNorm)
+function _semTok(s){
+  const cs=Array.from(String(s||'')),out=[];
+  for(let i=0;i<cs.length;){
+    const c=cs[i];
+    if(/\s/.test(c)){i++;continue;}
+    const rel=Object.keys(_SEM_SS).find(k=>_SEM_SS[k][0].includes(c));
+    if(rel){const[from,to]=_SEM_SS[rel];let v='';while(i<cs.length&&from.includes(cs[i]))v+=to[from.indexOf(cs[i++])];out.push({t:'ss',rel,v});continue;}
+    if(/\p{Nd}/u.test(c)){
+      let j=i;while(j<cs.length&&/[\p{Nd}.]/u.test(cs[j]))j++;while(cs[j-1]==='.')j--;
+      out.push({t:'mn',v:cs.slice(i,j).join('')});i=j;continue;
+    }
+    if(/\p{L}/u.test(c)){
+      const rest=cs.slice(i).join(''),fn=_SEM_FN.find(f=>rest.startsWith(f));
+      if(fn){out.push({t:'mi',v:fn,fn:true});i+=fn.length;continue;}
+      out.push({t:'mi',v:c});i++;continue;
+    }
+    out.push(_SEM_ID.includes(c)?{t:'mi',v:c}:{t:'mo',v:c,big:_SEM_BIG.includes(c)});i++;
+  }
+  return out;
+}
+
+// Row clean-up: ² attaches to what precedes it, 1 2 → 12, 3 . 5 → 3.5, sin x → sin⁡x
+function _semNorm(list){
+  const out=[];
+  list.forEach(n=>{
+    const p=out[out.length-1];
+    if(n.t==='ss'){
+      const sc=_semOne(_semNorm(_semTok(n.v)));
+      if(p?.t==='scr'&&!p[n.rel])p[n.rel]=sc;
+      else out.splice(out.length-(p?1:0),p?1:0,{t:'scr',base:p||_semRow([]),[n.rel]:sc});
+      return;
+    }
+    if(n.t==='mn'&&p?.t==='mn'){p.v+=n.v;return;}
+    if(n.t==='mn'&&p?.t==='mo'&&p.v==='.'&&out[out.length-2]?.t==='mn'){out.pop();out[out.length-1].v+='.'+n.v;return;}
+    out.push(n);
+  });
+  for(let i=out.length-2;i>=0;i--){
+    const b=out[i].t==='scr'?out[i].base:out[i];
+    if(b.fn&&out[i+1].v!=='⁡')out.splice(i+1,0,{t:'mo',v:'⁡'});
+  }
+  return out;
+}
+
+// One math node (any depth) → list of semantic nodes
+function _semNode(n){
+  if(!n)return[];
+  switch(n.type){
+    case'frac':return[{t:'frac',obl:!!n.obl,num:_semSeq(n.ns),den:_semSeq(n.ds)}];
+    case'rad': return[n.deg?{t:'root',c:_semSeq(n.bs),idx:{t:'mn',v:String(n.deg)}}:{t:'sqrt',c:_semSeq(n.bs)}];
+    case'delim':return[{t:'fence',open:n.open,close:n.close,c:_semRow(_semNorm(_semTok(n.bodyText)))}];
+    case'hdelim':{const d=_DS[n.delim],s=d&&(d.paired?(n.half==='L'?d.L:d.R):d.O);return[{t:'mo',v:s?s.nat:(n.s||'?'),fence:true}];}
+    case'op':{const v=n.text||n.s;return[_SEM_BIG.includes(v)?{t:'mo',v,big:true}:{t:'mi',v}];}
+    default:return _semTok(n.text||n.s);
+  }
+}
+function _semSeq(arr){return _semRow(_semNorm((arr||[]).flatMap(i=>i.type==='text'?_semTok(i.text):_semNode(i))));}
+
+// One canvas element + everything attached to it
+function _semElNode(rd,seen){
+  seen.add(rd.id);
+  const base=_semNode(rd.node),slots={};
+  ['sup','sub','over','under'].forEach(rel=>{
+    const k=_semKids(rd.id,rel).filter(e=>!seen.has(e.id));
+    if(k.length)slots[rel]=_semOne(_semNorm(k.flatMap(e=>_semElNode(e,seen))));
+  });
+  if(!Object.keys(slots).length){if(base[0])base[0].id=rd.id;return base;}
+  return[{t:'scr',id:rd.id,base:_semOne(_semNorm(base)),...slots}];
+}
+
+// Whole canvas (or any list of elements) → {t:'math',lines:[row,…]}
+function _semBuild(els=feEls){
+  const seen=new Set();
+  return{t:'math',lines:_semLines(els.filter(rd=>rd.type!=='textbox')).map(line=>
+    _semRow(_semNorm(line.filter(_semRoot).sort((a,b)=>a.x-b.x).flatMap(rd=>_semElNode(rd,seen)))))};
+}
+
+// ── MathML ──
+function _semScrTags(n){
+  return[n.over&&n.under?'munderover':n.over?'mover':n.under?'munder':'',
+         n.sup&&n.sub?'msubsup':n.sup?'msup':n.sub?'msub':''];
+}
+function _semML(n){
+  if(!n)return'<mrow></mrow>';
+  const M=_semML,e=escH;
+  switch(n.t){
+    case'row':  return n.c.length===1?M(n.c[0]):`<mrow>${n.c.map(M).join('')}</mrow>`;
+    case'mi':   return`<mi${_SEM_AUTOIT.test(n.v)?' mathvariant="normal"':''}>${e(n.v)}</mi>`;
+    case'mn':   return`<mn>${e(n.v)}</mn>`;
+    case'mo':   return`<mo${n.big?' largeop="true"':''}${n.fence?' fence="true" stretchy="true"':''}>${e(n.v)}</mo>`;
+    case'frac': return n.obl?`<mrow>${M(n.num)}<mo>/</mo>${M(n.den)}</mrow>`:`<mfrac>${M(n.num)}${M(n.den)}</mfrac>`;
+    case'sqrt': return`<msqrt>${M(n.c)}</msqrt>`;
+    case'root': return`<mroot>${M(n.c)}${M(n.idx)}</mroot>`;
+    case'fence':return`<mrow><mo fence="true" form="prefix">${e(n.open)}</mo>${M(n.c)}<mo fence="true" form="postfix">${e(n.close)}</mo></mrow>`;
+    case'scr':{
+      const[v,s]=_semScrTags(n);let b=M(n.base);
+      if(v)b=`<${v}>${b}${M(v==='mover'?n.over:n.under)}${v==='munderover'?M(n.over):''}</${v}>`;
+      if(s)b=`<${s}>${b}${M(s==='msup'?n.sup:n.sub)}${s==='msubsup'?M(n.sup):''}</${s}>`;
+      return b;
+    }
+    case'math': return n.lines.map(l=>`<math xmlns="http://www.w3.org/1998/Math/MathML" display="block">${M(l)}</math>`).join('\n');
+  }
+  return'';
+}
+
+// ── Tree tab (∑ mode, left panel) ──
+function _semRefresh(){
+  if(g('fe-pb-tree')?.classList.contains('hidden-pb')!==false)return;
+  cancelAnimationFrame(_semRefresh._f);_semRefresh._f=requestAnimationFrame(renderSemTree);
+}
+function _semFirstId(n){
+  if(!n||typeof n!=='object')return null;if(n.id)return n.id;
+  for(const v of Object.values(n)){const id=Array.isArray(v)?v.map(_semFirstId).find(Boolean):_semFirstId(v);if(id)return id;}
+  return null;
+}
+function _semOutline(n,role){
+  const li=document.createElement('li');
+  const lab=document.createElement('span');lab.className='sem-lbl'+(n.id?' has-id':'');
+  if(role)lab.innerHTML=`<span class="sem-role">${escH(t('sem-'+role))}</span>`;
+  const tag=n.t==='row'?'mrow':n.t==='scr'?_semScrTags(n).filter(Boolean).join(' · ')
+    :n.t==='frac'&&!n.obl?'mfrac':n.t==='frac'?'a/b':n.t==='sqrt'?'msqrt':n.t==='root'?'mroot':n.t==='fence'?'mrow':n.t;
+  lab.innerHTML+=`<span class="sem-tag">${tag}</span>`+
+    (n.v!=null?`<span class="sem-v">${escH(n.v)}</span>`:n.t==='fence'?`<span class="sem-v">${escH(n.open+' '+n.close)}</span>`:'');
+  if(n.id)lab.onclick=()=>{if(feEls.some(e=>e.id===n.id))feSelect(n.id);};
+  li.appendChild(lab);
+  const kids=n.t==='row'?n.c.map(c=>[c]):n.t==='frac'?[[n.num,'num'],[n.den,'den']]
+    :n.t==='sqrt'?[[n.c,'rad']]:n.t==='root'?[[n.c,'rad'],[n.idx,'deg']]:n.t==='fence'?[[n.c,'body']]
+    :n.t==='scr'?[[n.base,'base'],...['sub','sup','under','over'].filter(r=>n[r]).map(r=>[n[r],r])]:[];
+  const ul=document.createElement('ul');
+  kids.forEach(([c,r])=>{
+    if(c.v==='⁡')return;
+    if(c.t==='row'&&c.c.length===1)c=c.c[0];
+    if(c.t==='row'&&!c.c.length)return;
+    ul.appendChild(_semOutline(c,r));
+  });
+  if(ul.children.length)li.appendChild(ul);
+  return li;
+}
+function renderSemTree(){
+  const box=g('sem-tree');if(!box)return;
+  const lines=_semBuild().lines;box.innerHTML='';
+  if(!lines.length){box.innerHTML=`<div class="empty-msg" style="padding:6px">${t('sem-empty')}</div>`;return;}
+  lines.forEach((line,i)=>{
+    const card=document.createElement('div');card.className='sem-card';
+    const head=document.createElement('div');head.className='sem-card-head';head.textContent=t('sem-line')+' '+(i+1);
+    const prev=document.createElement('div');prev.className='sem-prev';
+    prev.innerHTML=_semML({t:'math',lines:[line]});
+    // Native MathML keeps the user's font (an OpenType MATH font gives the best result)
+    const layer=layerById(_semEl(_semFirstId(line))?.layerId)||activeLayer();
+    const mt=prev.firstElementChild;
+    if(mt){mt.style.fontFamily=layer.font||MFONT;if(layer.fvs)mt.style.fontVariationSettings=layer.fvs;}
+    const ul=document.createElement('ul');ul.className='sem-ol';
+    line.c.forEach(c=>{if(c.v!=='⁡')ul.appendChild(_semOutline(c));});
+    card.append(head,prev,ul);box.appendChild(card);
+  });
+}
+function semCopyML(){
+  if(!_guestOK('export'))return;
+  const tree=_semBuild();if(!tree.lines.length){toast(t('canvas-empty'));return;}
+  navigator.clipboard.writeText(_semML(tree)).then(()=>toast(t('sem-copied')),()=>toast(t('sem-copy-fail')));
 }
 
 
