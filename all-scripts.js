@@ -3452,7 +3452,7 @@ function mkNode(key){
     return{...b,type:'delim',open:key.open,close:key.close,minOv:2,bodyText:''};
   // opérateur display
   if(key.p&&key.p.includes('DisplayOperatorMinHeight'))
-    return{...b,type:'op',text:key.s,dispOpH:55,upperGap:.05,lowerGap:.05};
+    return{...b,type:'op',text:key.s,dispOpH:55,upperGap:.1,lowerGap:.1};
   return{...b,type:'free',text:key.s,stretch:100,axis:0,ic:0};
 }
 
@@ -3884,11 +3884,25 @@ function _semTop(rd){
 // Parent/child or same-slot siblings touch on purpose — never a collision
 function _semLinked(a,b){return a.att?.to===b.id||b.att?.to===a.id||(!!a.att&&!!b.att&&a.att.to===b.att.to&&a.att.rel===b.att.rel);}
 
-// Visible glyph box of an element, in canvas coordinates
+// Visible box of an element, in canvas coordinates. For a plain glyph (letter, digit, ∑…)
+// the top/bottom are the INK of the glyph, not its line box: the line box holds the font's
+// whole ascent/descent (huge for ∑), which would push scripts and limits away.
+const _semInkCtx=document.createElement('canvas').getContext('2d');
 function _semRect(rd){
-  const el=document.getElementById(rd.id)?.querySelector('.fe-mei');if(!el)return null;
-  const c=g('fe-canvas').getBoundingClientRect(),r=el.getBoundingClientRect();
-  return{x1:r.left-c.left,y1:r.top-c.top,x2:r.right-c.left,y2:r.bottom-c.top};
+  const mei=document.getElementById(rd.id)?.querySelector('.fe-mei');if(!mei)return null;
+  const c=g('fe-canvas').getBoundingClientRect(),r=mei.getBoundingClientRect();
+  const o={x1:r.left-c.left,y1:r.top-c.top,x2:r.right-c.left,y2:r.bottom-c.top};
+  const sp=mei.querySelector(':scope > .mnode > span');
+  if(sp&&sp.textContent&&!sp.children.length){
+    const cs=getComputedStyle(sp),sr=sp.getBoundingClientRect();
+    _semInkCtx.font=`${cs.fontStyle} ${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`;
+    const m=_semInkCtx.measureText(sp.textContent),fa=m.fontBoundingBoxAscent;
+    if(fa!=null&&m.actualBoundingBoxAscent+m.actualBoundingBoxDescent>0){
+      const base=sr.top+(sr.height-fa-m.fontBoundingBoxDescent)/2+fa-c.top; // baseline
+      o.y1=base-m.actualBoundingBoxAscent;o.y2=base+m.actualBoundingBoxDescent;
+    }
+  }
+  return o;
 }
 
 // ── Script size ──
@@ -4008,7 +4022,7 @@ function _semFit(base,seen=new Set()){
 // Spacing of a base's scripts, in em of the base size (stored on its node, so profiles keep it):
 // scrGap = gap between base and exponent/index · supUp / subDn = raise / lower them ·
 // upperGap / lowerGap = UpperLimitGapMin / LowerLimitGapMin (limits)
-const _SEM_GAPS={scrGap:.05,supUp:0,subDn:0,upperGap:.05,lowerGap:.05};
+const _SEM_GAPS={scrGap:.05,supUp:0,subDn:0,upperGap:.1,lowerGap:.1};
 const _semGap=(base,k)=>(base.node[k]??_SEM_GAPS[k])*base.size;
 
 // Line up one slot next to / above / below its base, plus each element's own fine-tuning
