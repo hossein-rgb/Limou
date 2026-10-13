@@ -1192,7 +1192,7 @@ function feRenderEl(rd){
     window.addEventListener('mouseup',onUp);
   });
   g('fe-canvas').appendChild(wrap);
-  chkConflict();if(showBB)renderBBs();
+  chkConflict();if(showBB)renderBBs();_semRefresh();
 }
 
 // ── Moving elements — shared by mouse drag (math + text box), arrows, inspector ──
@@ -1213,7 +1213,7 @@ function _feMoveSet(set,pos){
     if(s.lead){s.rd.x=s.x0+s.lead.rd.x-s.lead.x0;s.rd.y=s.y0+s.lead.rd.y-s.lead.y0;}
     _feElPos(s.rd);if(!s.lead)feInsUpdatePos(s.rd);
   });
-  chkConflict();if(showBB)renderBBs();
+  chkConflict();if(showBB)renderBBs();_semRefresh();
 }
 // After a finished move: an attached lead moved without its base keeps the move as
 // fine-tuning on top of its automatic place (att.dx/dy)
@@ -1318,7 +1318,7 @@ function _feDelOne(id){
   if(feSelId===id){feSelId=feSelIds.size?[...feSelIds].at(-1):null;}
   if(!feSelId)feInsClear();
   if(!feEls.length)g('fe-hint').style.opacity='1';
-  renderBBs();chkConflict();
+  renderBBs();chkConflict();_semRefresh();
 }
 function feDelete(){
   if(!feSelIds.size)return;
@@ -1944,7 +1944,7 @@ function _renderTextBox(rd){
   });
 
   g('fe-canvas').appendChild(wrap);
-  chkConflict();if(showBB)renderBBs();
+  chkConflict();if(showBB)renderBBs();_semRefresh();
 }
 
 // ── Sync textbox typography from layer (called when layer font/color changes) ──
@@ -2965,6 +2965,8 @@ document.addEventListener('DOMContentLoaded',()=>{
   _applyLang();
   // Doc text tool drag handler
   _initDocTextTool();
+  // Semantic tree panel (status bar button)
+  _semPanelInit();
 
   // ── Global ghost tracking — registered ONCE here so it works for both
   //    regular keyboard keys AND accent popup keys (which live in document.body)
@@ -4006,7 +4008,7 @@ function _semDrop(rd){
   const ob=old&&_semEl(old.to);
   if(ob&&ob!==hit?.rd)_semFit(_semTop(ob).top);
   if(hit)_semFit(_semTop(hit.rd).top);
-  chkConflict();if(showBB)renderBBs();
+  chkConflict();if(showBB)renderBBs();_semRefresh();
 }
 
 // Re-size (unless set by hand) and re-place everything attached below base
@@ -4126,6 +4128,295 @@ function semDetach(){
 function semResetSz(){
   const rd=_semEl(feSelId);if(!rd?._szManual)return;
   delete rd._szManual;_semFit(_semTop(rd).top);feInsUpdate();feSnap();
+}
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+// SEMANTIC TREE — built live from feEls (never stored) → panel, MathML, LaTeX
+// ═══════════════════════════════════════════════════════════════════════════
+// Nodes: {t:'row',c:[]} · {t:'mi'|'mn'|'mo',v,big?,fence?,fn?} · {t:'frac',num,den,obl}
+// {t:'sqrt',c} · {t:'root',c,idx} · {t:'fence',open,close,c} · {t:'scr',base,sup?,sub?,over?,under?}
+// Nodes made from a canvas element carry its id (click in the panel = select it).
+
+const _SEM_FN=['arcsin','arccos','arctan','sinh','cosh','tanh','sin','cos','tan','cot','sec','csc','log','ln','exp','lim','max','min','sup','inf','det','gcd','deg','arg','dim','ker'];
+const _SEM_BIG='∑∏∐∫∬∭∮⋃⋂⨁⨂⨀';
+const _SEM_ID='∞∅∂ℏ';
+// Unicode super/subscript characters → their content (² → 2)
+const _SEM_SS={sup:['⁰¹²³⁴⁵⁶⁷⁸⁹⁺⁻⁼⁽⁾ⁿⁱ','0123456789+−=()ni'],sub:['₀₁₂₃₄₅₆₇₈₉₊₋₌₍₎','0123456789+−=()']};
+// Letters MathML would italicize on its own — Limou shows them upright, so MathML keeps them upright
+const _SEM_AUTOIT=/^[A-Za-zΑ-Ωα-ωϑϕϖϰϱϵıȷ∂∇]$/u;
+const _semRow=c=>({t:'row',c});
+const _semOne=c=>c.length===1?c[0]:_semRow(c);
+
+// Text → raw tokens (scripts 'ss' are resolved by _semNorm)
+function _semTok(s){
+  const cs=Array.from(String(s||'')),out=[];
+  for(let i=0;i<cs.length;){
+    const c=cs[i];
+    if(/\s/.test(c)){i++;continue;}
+    const rel=Object.keys(_SEM_SS).find(k=>_SEM_SS[k][0].includes(c));
+    if(rel){const[from,to]=_SEM_SS[rel];let v='';while(i<cs.length&&from.includes(cs[i]))v+=to[from.indexOf(cs[i++])];out.push({t:'ss',rel,v});continue;}
+    if(/\p{Nd}/u.test(c)){
+      let j=i;while(j<cs.length&&/[\p{Nd}.]/u.test(cs[j]))j++;while(cs[j-1]==='.')j--;
+      out.push({t:'mn',v:cs.slice(i,j).join('')});i=j;continue;
+    }
+    if(/\p{L}/u.test(c)){
+      const rest=cs.slice(i).join(''),fn=_SEM_FN.find(f=>rest.startsWith(f));
+      if(fn){out.push({t:'mi',v:fn,fn:true});i+=fn.length;continue;}
+      out.push({t:'mi',v:c});i++;continue;
+    }
+    out.push(_SEM_ID.includes(c)?{t:'mi',v:c}:{t:'mo',v:c,big:_SEM_BIG.includes(c)});i++;
+  }
+  return out;
+}
+
+// Row clean-up: ² attaches to what precedes it, 1 2 → 12, 3 . 5 → 3.5, sin x → sin⁡x
+function _semNorm(list){
+  const out=[];
+  list.forEach(n=>{
+    const p=out[out.length-1];
+    if(n.t==='ss'){
+      const sc=_semOne(_semNorm(_semTok(n.v)));
+      if(p?.t==='scr'&&!p[n.rel])p[n.rel]=sc;
+      else out.splice(out.length-(p?1:0),p?1:0,{t:'scr',base:p||_semRow([]),[n.rel]:sc});
+      return;
+    }
+    if(n.t==='mn'&&p?.t==='mn'){p.v+=n.v;return;}
+    if(n.t==='mn'&&p?.t==='mo'&&p.v==='.'&&out[out.length-2]?.t==='mn'){out.pop();out[out.length-1].v+='.'+n.v;return;}
+    out.push(n);
+  });
+  for(let i=out.length-2;i>=0;i--){
+    const b=out[i].t==='scr'?out[i].base:out[i];
+    if(b.fn&&out[i+1].v!=='\u2061')out.splice(i+1,0,{t:'mo',v:'\u2061'});
+  }
+  return out;
+}
+
+// One math node (any depth) → list of semantic nodes
+function _semNode(n){
+  if(!n)return[];
+  switch(n.type){
+    case'frac':return[{t:'frac',obl:!!n.obl,num:_semSeq(n.ns),den:_semSeq(n.ds)}];
+    case'rad': return[n.deg?{t:'root',c:_semSeq(n.bs),idx:{t:'mn',v:String(n.deg)}}:{t:'sqrt',c:_semSeq(n.bs)}];
+    case'delim':return[{t:'fence',open:n.open,close:n.close,c:_semRow(_semNorm(_semTok(n.bodyText)))}];
+    case'hdelim':{const d=_DS[n.delim],s=d&&(d.paired?(n.half==='L'?d.L:d.R):d.O);return[{t:'mo',v:s?s.nat:(n.s||'?'),fence:true}];}
+    case'op':{const v=n.text||n.s;return[_SEM_BIG.includes(v)?{t:'mo',v,big:true}:{t:'mi',v}];}
+    default:return _semTok(n.text||n.s);
+  }
+}
+function _semSeq(arr){return _semRow(_semNorm((arr||[]).flatMap(i=>i.type==='text'?_semTok(i.text):_semNode(i))));}
+
+// One canvas element + everything attached to it
+function _semElNode(rd,seen){
+  seen.add(rd.id);
+  const base=_semNode(rd.node),slots={};
+  _SEM_RELS.forEach(rel=>{
+    const k=_semKids(rd.id,rel).filter(e=>!seen.has(e.id));
+    if(k.length)slots[rel]=_semOne(_semNorm(k.flatMap(e=>_semElNode(e,seen))));
+  });
+  if(!Object.keys(slots).length){if(base[0])base[0].id=rd.id;return base;}
+  return[{t:'scr',id:rd.id,base:_semOne(_semNorm(base)),...slots}];
+}
+
+// Whole canvas → {t:'math',lines:[row,…]} — one line per visual line (_semLines)
+function _semBuild(els=feEls){
+  const seen=new Set();
+  return{t:'math',lines:_semLines(els.filter(rd=>rd.type!=='textbox')).map(line=>
+    _semRow(_semNorm(line.filter(_semRoot).sort((a,b)=>a.x-b.x).flatMap(rd=>_semElNode(rd,seen)))))};
+}
+
+// ── MathML ── (native in browsers: keeps the user's font)
+function _semScrTags(n){
+  return[n.over&&n.under?'munderover':n.over?'mover':n.under?'munder':'',
+         n.sup&&n.sub?'msubsup':n.sup?'msup':n.sub?'msub':''];
+}
+function _semML(n){
+  if(!n)return'<mrow></mrow>';
+  const M=_semML,e=escH;
+  switch(n.t){
+    case'row':  return n.c.length===1?M(n.c[0]):`<mrow>${n.c.map(M).join('')}</mrow>`;
+    case'mi':   return`<mi${_SEM_AUTOIT.test(n.v)?' mathvariant="normal"':''}>${e(n.v)}</mi>`;
+    case'mn':   return`<mn>${e(n.v)}</mn>`;
+    case'mo':   return`<mo${n.big?' largeop="true"':''}${n.fence?' fence="true" stretchy="true"':''}>${e(n.v)}</mo>`;
+    case'frac': return n.obl?`<mrow>${M(n.num)}<mo>/</mo>${M(n.den)}</mrow>`:`<mfrac>${M(n.num)}${M(n.den)}</mfrac>`;
+    case'sqrt': return`<msqrt>${M(n.c)}</msqrt>`;
+    case'root': return`<mroot>${M(n.c)}${M(n.idx)}</mroot>`;
+    case'fence':return`<mrow><mo fence="true" form="prefix">${e(n.open)}</mo>${M(n.c)}<mo fence="true" form="postfix">${e(n.close)}</mo></mrow>`;
+    case'scr':{
+      const[v,s]=_semScrTags(n);let b=M(n.base);
+      if(v)b=`<${v}>${b}${M(v==='mover'?n.over:n.under)}${v==='munderover'?M(n.over):''}</${v}>`;
+      if(s)b=`<${s}>${b}${M(s==='msup'?n.sup:n.sub)}${s==='msubsup'?M(n.sup):''}</${s}>`;
+      return b;
+    }
+    case'math': return n.lines.map(l=>`<math xmlns="http://www.w3.org/1998/Math/MathML" display="block">${M(l)}</math>`).join('\n');
+  }
+  return'';
+}
+
+// ── LaTeX ── (MathJax, KaTeX, Overleaf: standard LaTeX conventions)
+const _TEX=(()=>{
+  const m={'×':'\\times','÷':'\\div','−':'-','±':'\\pm','·':'\\cdot','≠':'\\neq','≤':'\\le','≥':'\\ge','≈':'\\approx',
+    '∞':'\\infty','∑':'\\sum','∏':'\\prod','∐':'\\coprod','∫':'\\int','∬':'\\iint','∭':'\\iiint','∮':'\\oint',
+    '⋃':'\\bigcup','⋂':'\\bigcap','⨁':'\\bigoplus','⨂':'\\bigotimes','⨀':'\\bigodot','∂':'\\partial','∇':'\\nabla',
+    '∈':'\\in','⊂':'\\subset','→':'\\to','⇒':'\\Rightarrow','⟺':'\\iff','∧':'\\land','∨':'\\lor','¬':'\\neg',
+    'ℕ':'\\mathbb{N}','ℤ':'\\mathbb{Z}','ℚ':'\\mathbb{Q}','ℝ':'\\mathbb{R}','ℂ':'\\mathbb{C}','∅':'\\emptyset',
+    '∪':'\\cup','∩':'\\cap','∀':'\\forall','∃':'\\exists','ℏ':'\\hbar','{':'\\{','}':'\\}','‖':'\\|',
+    '⌊':'\\lfloor','⌋':'\\rfloor','⌈':'\\lceil','⌉':'\\rceil','%':'\\%','#':'\\#','&':'\\&','_':'\\_','$':'\\$','\u2061':''};
+  const lo='alpha beta gamma delta epsilon zeta eta theta iota kappa lambda mu nu xi o pi rho sigma tau upsilon phi chi psi omega'.split(' ');
+  const up='A B \\Gamma \\Delta E Z H \\Theta I K \\Lambda M N \\Xi O \\Pi P \\Sigma T \\Upsilon \\Phi X \\Psi \\Omega'.split(' ');
+  lo.forEach((n,i)=>{const k=i+(i>16?1:0);m[String.fromCodePoint(0x3B1+k)]=n==='o'?'o':'\\'+n;m[String.fromCodePoint(0x391+k)]=up[i];});
+  return m;
+})();
+// One character: command, or plain (math alphanumerics 𝑥 → x)
+const _texCh=c=>_TEX[c]??(/[\u{1D400}-\u{1D7FF}]/u.test(c)?c.normalize('NFKC'):c);
+// Join pieces, with a space only where a command would swallow the next letter (\alpha x)
+const _texJoin=a=>a.reduce((s,p)=>s+(/\\[A-Za-z]+$/.test(s)&&/^[A-Za-z]/.test(p)?' ':'')+p,'');
+const _texArg=n=>'{'+_semTeX(n)+'}';
+function _semTeX(n){
+  if(!n)return'';
+  const T=_semTeX;
+  switch(n.t){
+    case'row':  return _texJoin(n.c.map(T));
+    case'mi':   return n.fn?'\\'+n.v:_texJoin(Array.from(n.v).map(_texCh));
+    case'mn':   return n.v;
+    case'mo':   return _texCh(n.v);
+    case'frac': return n.obl?_texArg(n.num)+'/'+_texArg(n.den):'\\frac'+_texArg(n.num)+_texArg(n.den);
+    case'sqrt': return'\\sqrt'+_texArg(n.c);
+    case'root': return'\\sqrt['+T(n.idx)+']'+_texArg(n.c);
+    case'fence':return'\\left'+_texCh(n.open)+' '+T(n.c)+' \\right'+_texCh(n.close);
+    case'scr':{
+      let b=T(n.base);
+      if(n.over||n.under){
+        const big=n.base.big||n.base.fn;
+        b=big?b+'\\limits'+(n.under?'_'+_texArg(n.under):'')+(n.over?'^'+_texArg(n.over):'')
+          :(n.over?'\\overset'+_texArg(n.over):'')+(n.under?'\\underset'+_texArg(n.under):'')+'{'+b+'}';
+        if(n.sup||n.sub)b='{'+b+'}';
+      }else if(n.base.t==='row'&&n.base.c.length!==1)b='{'+b+'}';
+      return b+(n.sub?'_'+_texArg(n.sub):'')+(n.sup?'^'+_texArg(n.sup):'');
+    }
+    case'math': return n.lines.map(T).join('\n');
+  }
+  return'';
+}
+
+// ── Hints: a free element sitting in a slot of a bigger element without being attached
+// (typically work made before snapping existed). "Ignore" stores rd.semFree.
+function _semHints(){
+  const out=[];
+  feEls.forEach(rd=>{
+    if(rd.type==='textbox'||!_semRoot(rd)||rd.semFree)return;
+    const r=_semRect(rd);if(!r)return;
+    const px=(r.x1+r.x2)/2,py=(r.y1+r.y2)/2,ex=new Set([rd.id,..._semDesc(rd.id)]);
+    let best=null;
+    feEls.forEach(b=>{
+      if(b.type==='textbox'||ex.has(b.id)||b.size<=rd.size)return;
+      const br=_semRect(b);if(!br)return;
+      const area=(br.x2-br.x1)*(br.y2-br.y1);
+      _semZones(b,ex).forEach(z=>{if(px>=z.x1&&px<=z.x2&&py>=z.y1&&py<=z.y2&&(!best||area<best.area))best={...z,area};});
+    });
+    if(best)out.push({rd,hit:best});
+  });
+  return out;
+}
+function semHintAttach(id){
+  const h=_semHints().find(h=>h.rd.id===id);if(!h||!canEdit(h.rd.layerId))return;
+  h.rd._szManual=true; // the user sized it: keep that size
+  _semHit=h.hit;_semDrop(h.rd);feSnap();
+}
+function semHintIgnore(id){const rd=_semEl(id);if(rd){rd.semFree=true;feSnap();_semRefresh();}}
+
+// ── Tree panel (button in the status bar, ∑ mode) ──
+const _semOpen=()=>!g('sem-panel')?.classList.contains('hidden-pb');
+function _semRefresh(){
+  if(!_semOpen())return;
+  clearTimeout(_semRefresh._t);_semRefresh._t=setTimeout(renderSemPanel,120);
+}
+function semTogglePanel(on){
+  const p=g('sem-panel');if(!p)return;
+  on=on??!_semOpen();
+  p.classList.toggle('hidden-pb',!on);g('st-tree')?.classList.toggle('on',on);
+  try{localStorage.setItem('limou-tree-open',on?'1':'');}catch(_){}
+  if(on)renderSemPanel();
+}
+function _semFirstId(n){
+  if(!n||typeof n!=='object')return null;if(n.id)return n.id;
+  for(const v of Object.values(n)){const id=Array.isArray(v)?v.map(_semFirstId).find(Boolean):_semFirstId(v);if(id)return id;}
+  return null;
+}
+function _semOutline(n,role){
+  const li=document.createElement('li');
+  const lab=document.createElement('span');lab.className='sem-lbl'+(n.id?' has-id':'');
+  const tag=n.t==='row'||n.t==='fence'?'mrow':n.t==='scr'?_semScrTags(n).filter(Boolean).join(' · ')
+    :n.t==='frac'?(n.obl?'a/b':'mfrac'):n.t==='sqrt'?'msqrt':n.t==='root'?'mroot':n.t;
+  lab.innerHTML=(role?`<span class="sem-role">${escH(t('sem-'+role))}</span>`:'')+`<span class="sem-tag">${tag}</span>`+
+    (n.v!=null?`<span class="sem-v">${escH(n.v)}</span>`:n.t==='fence'?`<span class="sem-v">${escH(n.open+' '+n.close)}</span>`:'');
+  if(n.id)lab.onclick=()=>{if(_semEl(n.id))feSelect(n.id);};
+  li.appendChild(lab);
+  const kids=n.t==='row'?n.c.map(c=>[c]):n.t==='frac'?[[n.num,'num'],[n.den,'den']]
+    :n.t==='sqrt'?[[n.c,'rad']]:n.t==='root'?[[n.c,'rad'],[n.idx,'deg']]:n.t==='fence'?[[n.c,'body']]
+    :n.t==='scr'?[[n.base,'base'],..._SEM_RELS.filter(r=>n[r]).map(r=>[n[r],r])]:[];
+  const ul=document.createElement('ul');
+  kids.forEach(([c,r])=>{
+    if(c.v==='\u2061')return;
+    if(c.t==='row'&&c.c.length===1)c=c.c[0];
+    if(c.t==='row'&&!c.c.length)return;
+    ul.appendChild(_semOutline(c,r));
+  });
+  if(ul.children.length)li.appendChild(ul);
+  return li;
+}
+function renderSemPanel(){
+  const L=g('sem-lines'),T=g('sem-tree');if(!L||!T||!_semOpen())return;
+  const lines=_semBuild().lines;L.innerHTML='';T.innerHTML='';
+  if(!lines.length){L.innerHTML=`<div class="empty-msg">${t('sem-empty')}</div>`;return;}
+  lines.forEach((line,i)=>{
+    const head=`<div class="sem-lh">${t('sem-line')} ${i+1}</div>`;
+    const prev=document.createElement('div');prev.className='sem-prev';
+    prev.innerHTML=_semML({t:'math',lines:[line]});
+    // Native MathML in the line's layer font (an OpenType MATH font gives the best result)
+    const layer=layerById(_semEl(_semFirstId(line))?.layerId)||activeLayer(),mt=prev.firstElementChild;
+    if(mt){mt.style.fontFamily=layer.font||MFONT;if(layer.fvs)mt.style.fontVariationSettings=layer.fvs;}
+    L.insertAdjacentHTML('beforeend',head);L.appendChild(prev);
+    const ul=document.createElement('ul');ul.className='sem-ol';
+    line.c.forEach(c=>{if(c.v!=='\u2061')ul.appendChild(_semOutline(c));});
+    T.insertAdjacentHTML('beforeend',head);T.appendChild(ul);
+  });
+  _semHints().forEach(({rd,hit})=>{
+    const w=document.createElement('div');w.className='sem-warn';
+    const msg=t('sem-warn').replace('{a}',escH(_semLabel(rd))).replace('{rel}',escH(t('sem-'+hit.rel))).replace('{b}',escH(_semLabel(hit.rd)));
+    w.innerHTML=`<span>${msg}</span><button onclick="semHintAttach('${rd.id}')">${t('sem-attach')}</button>`+
+      `<button class="ghost" onclick="semHintIgnore('${rd.id}')">${t('sem-ignore')}</button>`;
+    L.appendChild(w);
+  });
+}
+function semCopyMenu(ev){
+  ev.stopPropagation();
+  const m=g('sem-menu');if(!m)return;
+  const show=m.classList.contains('hidden-pb');m.classList.toggle('hidden-pb',!show);
+  if(show)setTimeout(()=>document.addEventListener('mousedown',e=>{if(!m.contains(e.target))m.classList.add('hidden-pb');},{once:true}),0);
+}
+function semCopy(fmt){
+  g('sem-menu')?.classList.add('hidden-pb');
+  if(!_guestOK('export'))return;
+  const tree=_semBuild();if(!tree.lines.length){toast(t('canvas-empty'));return;}
+  const name=fmt==='latex'?'LaTeX':'MathML';
+  navigator.clipboard.writeText(fmt==='latex'?_semTeX(tree):_semML(tree))
+    .then(()=>toast(name+' '+t('sem-copied')),()=>toast(t('sem-copy-fail')));
+}
+// Drag the panel's top edge to resize it (height remembered)
+function _semPanelInit(){
+  const p=g('sem-panel'),h=g('sem-resize');if(!p||!h)return;
+  try{const v=+localStorage.getItem('limou-tree-h');if(v)p.style.height=v+'px';
+      if(localStorage.getItem('limou-tree-open'))semTogglePanel(true);}catch(_){}
+  h.addEventListener('mousedown',ev=>{
+    ev.preventDefault();const y0=ev.clientY,h0=p.offsetHeight,max=g('fe-wrap').offsetHeight*.75;
+    const mv=e=>{p.style.height=Math.max(120,Math.min(max,h0+y0-e.clientY))+'px';};
+    const up=()=>{document.removeEventListener('mousemove',mv);document.removeEventListener('mouseup',up);
+      try{localStorage.setItem('limou-tree-h',p.offsetHeight);}catch(_){}};
+    document.addEventListener('mousemove',mv);document.addEventListener('mouseup',up);
+  });
+  // Typing in a slot (fraction, root, delimiter) changes the tree too
+  g('fe-canvas').addEventListener('input',_semRefresh);
 }
 
 
@@ -4895,6 +5186,27 @@ const _I18N = {
   'sem-manual-hint':      {en:'set by hand, no longer follows the base', fr:'réglée à la main, ne suit plus la base'},
   'sem-auto-reset':       {en:'Back to auto',      fr:'Revenir en auto'},
   'ph-scripts':           {en:'Scripts',           fr:'Exposants & indices'},
+  // Semantic tree panel
+  'st-tree':              {en:'Tree',              fr:'Arbre'},
+  'sem-tree-title':       {en:'Semantic tree',     fr:'Arbre sémantique'},
+  'sem-live':             {en:'live',              fr:'à jour'},
+  'sem-copy':             {en:'Copy',              fr:'Copier'},
+  'sem-mathml-sub':       {en:'Browsers, Word, MathJax', fr:'Navigateurs, Word, MathJax'},
+  'sem-latex-sub':        {en:'MathJax, KaTeX, Overleaf', fr:'MathJax, KaTeX, Overleaf'},
+  'sem-copied':           {en:'copied',            fr:'copié'},
+  'sem-copy-fail':        {en:'Could not copy to the clipboard', fr:'Copie dans le presse-papiers impossible'},
+  'sem-empty':            {en:'No formula on the canvas yet.', fr:'Aucune formule sur le canvas.'},
+  'sem-line':             {en:'Line',              fr:'Ligne'},
+  'sem-warn':             {en:'“{a}” sits at the {rel} of {b} but is not attached — forgotten?', fr:'« {a} » est placé en {rel} de {b} sans y être attaché — oublié ?'},
+  'sem-attach':           {en:'Attach',            fr:'Attacher'},
+  'sem-ignore':           {en:'Ignore',            fr:'Ignorer'},
+  'sem-base':             {en:'base',              fr:'base'},
+  'sem-num':              {en:'numerator',         fr:'numérateur'},
+  'sem-den':              {en:'denominator',       fr:'dénominateur'},
+  'sem-rad':              {en:'radicand',          fr:'radicande'},
+  'sem-deg':              {en:'degree',            fr:'degré'},
+  'sem-body':             {en:'content',           fr:'contenu'},
+  'sem-close':            {en:'Close',             fr:'Fermer'},
   'lbl-scrgap':           {en:'ScriptGap',         fr:'Écart (ScriptGap)'},
   'lbl-supshift':         {en:'SuperscriptShift',  fr:'Hauteur exposant'},
   'lbl-subshift':         {en:'SubscriptShift',    fr:'Profondeur indice'},
@@ -5052,6 +5364,9 @@ function _applyLang(){
 
   // Rebuild keyboard (translates category names + level labels)
   if(g('kb-root')&&g('kb-root').children.length)buildKb();
+
+  // Semantic tree panel (roles, hints)
+  _semRefresh();
 }
 // Apply language on DOMContentLoaded handled by init.js
 

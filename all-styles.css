@@ -411,6 +411,56 @@ canvas.ruler { background: #f0f0f0; cursor: crosshair; user-select: none; displa
 .sem-dot.on { background: #2EAD4B; border-color: #1d7a32; transform: scale(1.6);
   box-shadow: 0 0 0 3px rgba(46,173,75,.22); }
 .st-snap { font-weight: 600; }
+/* Semantic tree panel — below the canvas, opened from the status bar */
+.st-btn { font-size: 11px; font-weight: 600; padding: 2px 10px; border-radius: 4px; border: 1px solid rgba(0,0,0,.25);
+  background: transparent; color: var(--fe-topbar-text); cursor: pointer; }
+.st-btn:hover { background: rgba(0,0,0,.08); }
+.st-btn.on { background: #1a1a1a; color: var(--fe-topbar); border-color: #1a1a1a; }
+body.mode-doc #st-tree { display: none; }
+#sem-panel { height: 300px; flex-shrink: 0; position: relative; display: flex; flex-direction: column;
+  background: #fff; border-top: 1px solid #ddd8a8; box-shadow: 0 -4px 14px rgba(0,0,0,.06); }
+/* The side panels float over the canvas: keep the tree clear of whichever ones are open */
+#work:has(#panel-left:not(.hidden))  #sem-panel { margin-left: var(--panel-w); }
+#work:has(#panel-right:not(.hidden)) #sem-panel { margin-right: var(--panel-w); }
+#sem-resize { position: absolute; top: -4px; left: 0; right: 0; height: 8px; cursor: ns-resize; z-index: 2; }
+.sem-head { height: 36px; flex-shrink: 0; display: flex; align-items: center; gap: 10px; padding: 0 12px;
+  background: var(--fe-panel, #fdfce8); border-bottom: 1px solid #f0eed8; }
+.sem-title { font-size: 12px; font-weight: 600; color: #222; }
+.sem-live { display: inline-flex; align-items: center; gap: 5px; font-size: 10px; color: var(--text2); }
+.sem-live-dot { width: 7px; height: 7px; border-radius: 50%; background: #2EAD4B; }
+.sem-copy { position: relative; }
+.sem-copy-btn { padding: 4px 12px; border: 1px solid #d8d4a0; border-radius: 4px; background: #fff; color: #333;
+  font-size: 11px; font-weight: 600; cursor: pointer; }
+.sem-menu { position: absolute; right: 0; top: 30px; z-index: 30; width: 210px; padding: 4px; display: flex; flex-direction: column;
+  background: #fff; border: 1px solid #e3e1c4; border-radius: 6px; box-shadow: 0 6px 18px rgba(0,0,0,.12); }
+.sem-menu button { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 7px 9px; border: none;
+  border-radius: 4px; background: transparent; cursor: pointer; text-align: left; font-size: 12px; color: #222; }
+.sem-menu button:hover { background: var(--accent-soft); }
+.sem-menu button span { font-size: 10px; color: var(--text2); }
+.sem-x { width: 26px; height: 26px; border: none; background: transparent; color: #888; font-size: 13px; cursor: pointer; border-radius: 4px; }
+.sem-x:hover { background: rgba(0,0,0,.06); color: #333; }
+.sem-body { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+#sem-lines, #sem-tree { overflow: auto; padding: 10px 14px; }
+#sem-lines { border-right: 1px solid #f0eed8; }
+.sem-lh { font-size: 10px; color: var(--text3); margin: 6px 0 4px; }
+.sem-lh:first-child { margin-top: 0; }
+.sem-prev { padding: 8px; border: 1px solid #f0f0f0; border-radius: 6px; font-size: 22px; color: #111; overflow-x: auto; }
+.sem-prev math { margin: 0; }
+.sem-warn { display: flex; align-items: center; gap: 8px; margin-top: 8px; padding: 7px 10px; border-radius: 6px;
+  background: #fff6dc; border: 1px solid #f0d890; font-size: 11px; color: #6a4a00; line-height: 1.4; }
+.sem-warn span { flex: 1; }
+.sem-warn button { padding: 3px 9px; border: 1px solid #e0c470; border-radius: 4px; background: #fff; color: #6a4a00; font-size: 11px; cursor: pointer; }
+.sem-warn button.ghost { border-color: transparent; background: transparent; }
+.sem-ol, .sem-ol ul { list-style: none; margin: 0; padding: 0; }
+.sem-ol ul { padding-left: 14px; }
+.sem-ol li { font-size: 11px; line-height: 1.85; }
+.sem-lbl { color: var(--text2); }
+.sem-lbl.has-id { cursor: pointer; }
+.sem-lbl.has-id:hover .sem-v { text-decoration: underline; }
+.sem-role { color: var(--text3); margin-right: 5px; }
+.sem-tag { font-family: monospace; font-size: 10px; color: var(--text3); margin-right: 5px; }
+.sem-v { font-family: var(--mfont); font-size: 14px; color: #111; }
+
 /* Inspector: relation chip + automatic size note */
 .sem-chip { padding: 1px 7px; border-radius: 9px; background: var(--accent-soft); color: #111; font-size: 10px; font-weight: 600; }
 .sem-chip.off { background: #eee; color: var(--text2); }

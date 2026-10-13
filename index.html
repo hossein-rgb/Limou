@@ -191,6 +191,27 @@
           <div id="coord-display"></div>
         </div>
       </div>
+      <!-- Semantic tree panel — opened from the status bar (button "Tree") -->
+      <div id="sem-panel" class="hidden-pb">
+        <div id="sem-resize"></div>
+        <div class="sem-head">
+          <span class="sem-title" data-i18n="sem-tree-title">Semantic tree</span>
+          <span class="sem-live"><span class="sem-live-dot"></span><span data-i18n="sem-live">live</span></span>
+          <span style="flex:1"></span>
+          <div class="sem-copy">
+            <button class="sem-copy-btn" onclick="semCopyMenu(event)" data-guest="export"><span data-i18n="sem-copy">Copy</span> ▾</button>
+            <div class="sem-menu hidden-pb" id="sem-menu">
+              <button onclick="semCopy('mathml')"><b>MathML</b><span data-i18n="sem-mathml-sub">Browsers, Word, MathJax</span></button>
+              <button onclick="semCopy('latex')"><b>LaTeX</b><span data-i18n="sem-latex-sub">MathJax, KaTeX, Overleaf</span></button>
+            </div>
+          </div>
+          <button class="sem-x" onclick="semTogglePanel(false)" data-i18n-title="sem-close" title="Close" aria-label="Close">✕</button>
+        </div>
+        <div class="sem-body">
+          <div id="sem-lines"></div>
+          <div id="sem-tree"></div>
+        </div>
+      </div>
       <!-- Grid controls bar -->
       <div id="gc-bar" style="display:none">
         <span data-i18n="gc-grid-step">Grid step:</span>
@@ -596,6 +617,7 @@
       <button class="zbtn" onclick="setZoom(zoom+.1)">+</button>
       <button class="zfit" id="zfit-btn" onclick="fitPage()" data-i18n="btn-fit">Fit</button>
     </div>
+    <button class="st-btn" id="st-tree" onclick="semTogglePanel()" data-i18n="st-tree">Tree</button>
   </div>
 
 </div><!-- /shell -->
